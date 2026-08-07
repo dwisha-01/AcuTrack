@@ -42,6 +42,7 @@ class Camera(Base):
     alerts = relationship("Alert", back_populates="camera")
     snapshots = relationship("OccupancySnapshot", back_populates="camera")
     histories = relationship("TrackedPersonHistory", back_populates="camera")
+    sightings = relationship("Sighting", back_populates="camera")
 
 # ==========================================
 # 2. ZONE MODEL
@@ -69,16 +70,21 @@ class Zone(Base):
 class TrackedPerson(Base):
     __tablename__ = 'tracked_persons'
     
-    global_id = Column(Integer, primary_key=True)         # Matches the cross-camera global_id
+    person_id = Column(Integer, primary_key=True)         # Matches the cross-camera global_id
+    best_image_path = Column(String(255), nullable=True)  # File path to the highest-quality crop snapshot
     first_seen = Column(DateTime, nullable=False, default=datetime.utcnow)
     last_seen = Column(DateTime, nullable=False, default=datetime.utcnow)
+    total_dwell = Column(Integer, default=0)              # Cached aggregated dwell time (seconds)
+    visit_count = Column(Integer, default=1)              # Number of separate camera sightings
     is_flagged_suspicious = Column(Boolean, default=False)
     flagged_reason = Column(Text, nullable=True)
     manually_flagged = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     embeddings = relationship("PersonEmbedding", back_populates="person", cascade="all, delete-orphan")
+    sightings = relationship("Sighting", back_populates="person", cascade="all, delete-orphan")
     dwell_times = relationship("DwellTime", back_populates="person", cascade="all, delete-orphan")
     histories = relationship("TrackedPersonHistory", back_populates="person", cascade="all, delete-orphan")
     alerts = relationship("Alert", back_populates="person")
@@ -90,22 +96,45 @@ class PersonEmbedding(Base):
     __tablename__ = 'person_embeddings'
     
     id = Column(Integer, primary_key=True)
-    global_id = Column(Integer, ForeignKey('tracked_persons.global_id', ondelete='CASCADE'), nullable=False)
-    embedding_data = Column(LargeBinary, nullable=False)  # Stored as serialized NumPy arrays
+    person_id = Column(Integer, ForeignKey('tracked_persons.person_id', ondelete='CASCADE'), nullable=False)
+    embedding_data = Column(LargeBinary, nullable=False)  # Stored as serialized float32 NumPy arrays (BLOB)
     camera_key = Column(String(50), nullable=False)       # Camera angle from which it was extracted
+    confidence = Column(Float, default=1.0)              # Quality/confidence index of tracking/extraction
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
     person = relationship("TrackedPerson", back_populates="embeddings")
 
+Index('idx_embedding_person', PersonEmbedding.person_id)
+
 # ==========================================
-# 5. DWELL TIMES LOG MODEL
+# 5. SIGHTINGS LOG MODEL
+# ==========================================
+class Sighting(Base):
+    __tablename__ = 'sightings'
+    
+    sighting_id = Column(Integer, primary_key=True)
+    person_id = Column(Integer, ForeignKey('tracked_persons.person_id', ondelete='CASCADE'), nullable=False)
+    camera_id = Column(Integer, ForeignKey('cameras.id', ondelete='CASCADE'), nullable=False)
+    timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
+    confidence = Column(Float, nullable=False)            # YOLO/StrongSORT tracking confidence score
+    zone = Column(String(100), nullable=True)              # Name of active zone (if any) e.g., 'Zone A'
+    snapshot_path = Column(String(255), nullable=False)    # File path of the cropped snapshot image
+    
+    # Relationships
+    person = relationship("TrackedPerson", back_populates="sightings")
+    camera = relationship("Camera", back_populates="sightings")
+
+Index('idx_sightings_person_timestamp', Sighting.person_id, Sighting.timestamp.desc())
+
+# ==========================================
+# 6. DWELL TIMES LOG MODEL
 # ==========================================
 class DwellTime(Base):
     __tablename__ = 'dwell_times'
     
     id = Column(Integer, primary_key=True)
-    global_id = Column(Integer, ForeignKey('tracked_persons.global_id', ondelete='CASCADE'), nullable=False)
+    person_id = Column(Integer, ForeignKey('tracked_persons.person_id', ondelete='CASCADE'), nullable=False)
     zone_id = Column(Integer, ForeignKey('zones.id', ondelete='CASCADE'), nullable=False)
     entry_time = Column(DateTime, nullable=False, default=datetime.utcnow)
     exit_time = Column(DateTime, nullable=True)            # None/Null if currently inside the zone
@@ -116,17 +145,17 @@ class DwellTime(Base):
     zone = relationship("Zone", back_populates="dwell_times")
 
 # Create Indexing for performance
-Index('idx_dwell_global_id', DwellTime.global_id)
+Index('idx_dwell_person_id', DwellTime.person_id)
 Index('idx_dwell_zone_id', DwellTime.zone_id)
 
 # ==========================================
-# 6. DETAILED TRAJECTORY HISTORY (Optional)
+# 7. DETAILED TRAJECTORY HISTORY (Optional)
 # ==========================================
 class TrackedPersonHistory(Base):
     __tablename__ = 'tracked_persons_history'
     
     id = Column(Integer, primary_key=True)
-    global_id = Column(Integer, ForeignKey('tracked_persons.global_id', ondelete='CASCADE'), nullable=False)
+    person_id = Column(Integer, ForeignKey('tracked_persons.person_id', ondelete='CASCADE'), nullable=False)
     camera_id = Column(Integer, ForeignKey('cameras.id', ondelete='CASCADE'), nullable=False)
     x_coord = Column(Integer, nullable=False)             # Box center-x
     y_coord = Column(Integer, nullable=False)             # Box center-y
@@ -136,10 +165,10 @@ class TrackedPersonHistory(Base):
     person = relationship("TrackedPerson", back_populates="histories")
     camera = relationship("Camera", back_populates="histories")
 
-Index('idx_history_global_time', TrackedPersonHistory.global_id, TrackedPersonHistory.timestamp)
+Index('idx_history_person_time', TrackedPersonHistory.person_id, TrackedPersonHistory.timestamp)
 
 # ==========================================
-# 7. OCCUPANCY SNAPSHOTS (For footfall analysis charts)
+# 8. OCCUPANCY SNAPSHOTS (For footfall analysis charts)
 # ==========================================
 class OccupancySnapshot(Base):
     __tablename__ = 'occupancy_snapshots'
@@ -158,13 +187,13 @@ class OccupancySnapshot(Base):
 Index('idx_occupancy_timestamp', OccupancySnapshot.timestamp)
 
 # ==========================================
-# 8. SECURITY & ANOMALY ALERTS MODEL
+# 9. SECURITY & ANOMALY ALERTS MODEL
 # ==========================================
 class Alert(Base):
     __tablename__ = 'alerts'
     
     id = Column(Integer, primary_key=True)
-    global_id = Column(Integer, ForeignKey('tracked_persons.global_id', ondelete='SET NULL'), nullable=True)
+    person_id = Column(Integer, ForeignKey('tracked_persons.person_id', ondelete='SET NULL'), nullable=True)
     camera_id = Column(Integer, ForeignKey('cameras.id', ondelete='CASCADE'), nullable=False)
     zone_id = Column(Integer, ForeignKey('zones.id', ondelete='SET NULL'), nullable=True)
     alert_type = Column(String(50), nullable=False)       # LOITERING, OVERCROWDING, SUSPICIOUS_MOVEMENT
@@ -191,47 +220,48 @@ def init_db(video_sources_config=None, zones_config=None):
     
     session = db_session()
     try:
-        # 1. Seed default Cameras if table is empty
-        if session.query(Camera).count() == 0 and video_sources_config:
-            print("Database: Seeding default cameras config...")
+        # 1. Seed/Sync Cameras from configuration
+        if video_sources_config:
             for key, info in video_sources_config.items():
-                cam = Camera(
-                    camera_key=key,
-                    label=info.get("label", key),
-                    description=info.get("desc", ""),
-                    source_url=str(info.get("file", ""))
-                )
-                session.add(cam)
+                cam = session.query(Camera).filter(Camera.camera_key == key).first()
+                if not cam:
+                    print(f"Database: Adding missing camera config '{key}'...")
+                    cam = Camera(
+                        camera_key=key,
+                        label=info.get("label", key),
+                        description=info.get("desc", ""),
+                        source_url=str(info.get("file", ""))
+                    )
+                    session.add(cam)
             session.commit()
             
-        # 2. Seed default Zones if table is empty
-        if session.query(Zone).count() == 0 and zones_config:
-            print("Database: Seeding default zones config...")
-            # Fetch DB camera records to link zone keys
+        # 2. Seed/Sync default Zones from configuration
+        if zones_config:
             cameras_map = {c.camera_key: c.id for c in session.query(Camera).all()}
             for zone_name, info in zones_config.items():
-                # Re-map zones to cameras. If specific cameras hold specific zones,
-                # you can customize this logic. By default, let's register zones
-                # for all available seeded cameras.
                 for cam_key, cam_id in cameras_map.items():
-                    # Parse coords
-                    coords_str = json.dumps(list(info.get("coords", ())))
-                    color_str = ",".join(map(str, info.get("color", (74, 144, 217))))
-                    
-                    # Assume default capacity from app settings
-                    capacity_val = 10
-                    if "Zone A" in zone_name: capacity_val = 8
-                    elif "Zone B" in zone_name: capacity_val = 10
-                    elif "Zone C" in zone_name: capacity_val = 8
-                    
-                    zone = Zone(
-                        camera_id=cam_id,
-                        zone_name=zone_name,
-                        coords_json=coords_str,
-                        color_rgb=color_str,
-                        capacity=capacity_val
-                    )
-                    session.add(zone)
+                    existing_zone = session.query(Zone).filter(
+                        Zone.camera_id == cam_id,
+                        Zone.zone_name == zone_name
+                    ).first()
+                    if not existing_zone:
+                        print(f"Database: Adding missing zone '{zone_name}' for camera '{cam_key}'...")
+                        coords_str = json.dumps(list(info.get("coords", ())))
+                        color_str = ",".join(map(str, info.get("color", (74, 144, 217))))
+                        
+                        capacity_val = 10
+                        if "Zone A" in zone_name: capacity_val = 8
+                        elif "Zone B" in zone_name: capacity_val = 10
+                        elif "Zone C" in zone_name: capacity_val = 8
+                        
+                        zone = Zone(
+                            camera_id=cam_id,
+                            zone_name=zone_name,
+                            coords_json=coords_str,
+                            color_rgb=color_str,
+                            capacity=capacity_val
+                        )
+                        session.add(zone)
             session.commit()
     except Exception as e:
         session.rollback()

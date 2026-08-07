@@ -16,6 +16,9 @@ venv/
 
 # Datasets
 UCSD_Anomaly_Dataset.v1p2/
+mall_dataset/
+Wildtrack/
+
 
 # Environment Variables
 .env

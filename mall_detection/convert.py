@@ -37,7 +37,16 @@ for f in frames:
     out.write(dark)
 out.release()
 print("Done! lowlight_video.mp4 created")
-
+# MOT17-09 sequence
+frames = sorted(glob.glob("MOT17-09-FRCNN/img1/*.jpg"))
+first = cv2.imread(frames[0])
+h, w = first.shape[:2]
+out = cv2.VideoWriter("mot17_video.mp4", cv2.VideoWriter_fourcc(*'mp4v'), 30, (w, h))
+for f in frames:
+    img = cv2.imread(f)
+    out.write(img)
+out.release()
+print("Done! mot17_video.mp4 created")
 
 
 

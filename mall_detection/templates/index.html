@@ -27,14 +27,11 @@
       top: 0;
       z-index: 100;
     }
-
     .logo { display: flex; align-items: center; gap: 12px; }
     .logo-icon {
-      width: 38px; height: 38px;
-      background: #3b82f6;
-      border-radius: 9px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 17px;
+      width: 38px; height: 38px; background: #3b82f6;
+      border-radius: 9px; display: flex; align-items: center;
+      justify-content: center; font-size: 17px;
     }
     .logo-name { font-size: 17px; font-weight: 700; color: #1a202c; }
     .logo-tag  { font-size: 11px; color: #94a3b8; margin-top: 1px; }
@@ -49,244 +46,737 @@
       width: 7px; height: 7px; border-radius: 50%;
       background: #22c55e; animation: pulse 1.4s infinite;
     }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: 0.3; }
-    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
     @keyframes alertPulse {
-      0%, 100% { box-shadow: 0 0 0 2px rgba(239,68,68,0.3); }
-      50%       { box-shadow: 0 0 0 5px rgba(239,68,68,0.08); }
+      0%,100%{box-shadow:0 0 0 2px rgba(239,68,68,.3)}
+      50%{box-shadow:0 0 0 5px rgba(239,68,68,.08)}
     }
     .clock { font-size: 12px; color: #94a3b8; }
     .page { max-width: 1320px; margin: 0 auto; padding: 24px 28px; }
 
+    /* MODEL STATUS PILL in header */
+    .model-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 20px;
+      font-size: 12px; font-weight: 500;
+      border: 1px solid #e2e8f0; background: #f8fafc; color: #64748b;
+      cursor: default; transition: all .2s;
+    }
+    .model-pill.trained   { background:#eff6ff; border-color:#93c5fd; color:#1d4ed8; }
+    .model-pill.collecting{ background:#f0fdf4; border-color:#86efac; color:#15803d; }
+    .model-pill.training  { background:#fffbeb; border-color:#fcd34d; color:#92400e; }
+    .model-pill-dot { width:7px; height:7px; border-radius:50%; background:currentColor; }
+    .model-pill.training .model-pill-dot { animation: pulse 0.8s infinite; }
+
     /* CAMERA SELECTOR */
     .selector-section {
-      background: #fff;
-      border: 1px solid #e2e8f0;
-      border-radius: 12px;
-      padding: 18px 20px;
-      margin-bottom: 20px;
+      background:#fff; border:1px solid #e2e8f0;
+      border-radius:12px; padding:18px 20px; margin-bottom:20px;
     }
     .selector-title {
-      font-size: 12px; font-weight: 600; color: #94a3b8;
-      text-transform: uppercase; letter-spacing: 0.06em;
-      margin-bottom: 12px;
+      font-size:12px; font-weight:600; color:#94a3b8;
+      text-transform:uppercase; letter-spacing:.06em; margin-bottom:12px;
     }
-    .video-buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .video-buttons { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
     .vid-btn {
-      padding: 10px 20px;
-      border-radius: 8px;
-      border: 1.5px solid #e2e8f0;
-      background: #f8fafc;
-      cursor: pointer;
-      font-family: 'Poppins', sans-serif;
-      font-size: 13px; font-weight: 600;
-      color: #64748b;
-      transition: all 0.2s;
-      text-align: left;
+      padding:10px 20px; border-radius:8px; border:1.5px solid #e2e8f0;
+      background:#f8fafc; cursor:pointer; font-family:'Poppins',sans-serif;
+      font-size:13px; font-weight:600; color:#64748b; transition:all .2s; text-align:left;
     }
-    .vid-btn:hover { border-color: #3b82f6; color: #3b82f6; background: #eff6ff; }
-    .vid-btn.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
-    .vid-btn .btn-desc {
-      font-size: 10px; opacity: 0.75;
-      display: block; margin-top: 2px; font-weight: 400;
-    }
-    .vid-btn.active .btn-desc { opacity: 0.85; }
-    .vid-btn.live-btn { border-color: #ef4444; color: #ef4444; background: #fff5f5; }
-    .vid-btn.live-btn:hover { background: #fee2e2; border-color: #dc2626; }
-    .vid-btn.live-btn.active { background: #ef4444; border-color: #ef4444; color: #fff; }
+    .vid-btn:hover { border-color:#3b82f6; color:#3b82f6; background:#eff6ff; }
+    .vid-btn.active { background:#3b82f6; border-color:#3b82f6; color:#fff; }
+    .vid-btn .btn-desc { font-size:10px; opacity:.75; display:block; margin-top:2px; font-weight:400; }
+    .vid-btn.active .btn-desc { opacity:.85; }
+    .vid-btn.live-btn { border-color:#ef4444; color:#ef4444; background:#fff5f5; }
+    .vid-btn.live-btn:hover { background:#fee2e2; border-color:#dc2626; }
+    .vid-btn.live-btn.active { background:#ef4444; border-color:#ef4444; color:#fff; }
     .live-cam-dot {
-      display: inline-block;
-      width: 7px; height: 7px; border-radius: 50%;
-      background: currentColor;
-      margin-right: 5px;
-      animation: pulse 1.4s infinite;
+      display:inline-block; width:7px; height:7px; border-radius:50%;
+      background:currentColor; margin-right:5px; animation:pulse 1.4s infinite;
     }
-    .divider { width: 1px; height: 40px; background: #e2e8f0; margin: 0 4px; }
+    .divider { width:1px; height:40px; background:#e2e8f0; margin:0 4px; }
     .flow-btn {
-      padding: 10px 18px;
-      border-radius: 8px;
-      border: 1.5px solid #e2e8f0;
-      background: #f8fafc;
-      cursor: pointer;
-      font-family: 'Poppins', sans-serif;
-      font-size: 13px; font-weight: 500;
-      color: #64748b;
-      transition: all 0.2s;
+      padding:10px 18px; border-radius:8px; border:1.5px solid #e2e8f0;
+      background:#f8fafc; cursor:pointer; font-family:'Poppins',sans-serif;
+      font-size:13px; font-weight:500; color:#64748b; transition:all .2s;
     }
-    .flow-btn.on { background: #eff6ff; border-color: #3b82f6; color: #2563eb; }
+    .flow-btn.on { background:#eff6ff; border-color:#3b82f6; color:#2563eb; }
 
     /* STAT CARDS */
     .stats-row {
-      display: grid; grid-template-columns: repeat(4, 1fr);
-      gap: 14px; margin-bottom: 20px;
+      display:grid; grid-template-columns:repeat(4,1fr);
+      gap:14px; margin-bottom:20px;
     }
     .stat-card {
-      background: #fff; border: 1px solid #e2e8f0;
-      border-radius: 12px; padding: 18px 20px;
-      border-left: 4px solid #3b82f6;
+      background:#fff; border:1px solid #e2e8f0;
+      border-radius:12px; padding:18px 20px;
+      border-left:4px solid #3b82f6;
     }
-    .stat-card.green  { border-left-color: #22c55e; }
-    .stat-card.orange { border-left-color: #f97316; }
-    .stat-card.purple { border-left-color: #a855f7; }
+    .stat-card.green  { border-left-color:#22c55e; }
+    .stat-card.orange { border-left-color:#f97316; }
+    .stat-card.purple { border-left-color:#a855f7; }
     .stat-label {
-      font-size: 11px; color: #94a3b8; font-weight: 500;
-      text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;
+      font-size:11px; color:#94a3b8; font-weight:500;
+      text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px;
     }
-    .stat-value { font-size: 38px; font-weight: 700; color: #1e293b; line-height: 1; }
-    .stat-sub   { font-size: 11px; color: #cbd5e1; margin-top: 5px; }
+    .stat-value { font-size:38px; font-weight:700; color:#1e293b; line-height:1; }
+    .stat-sub   { font-size:11px; color:#cbd5e1; margin-top:5px; }
 
     /* MAIN GRID */
-    .main-grid { display: grid; grid-template-columns: 1fr 340px; gap: 18px; }
+    .main-grid { display:grid; grid-template-columns:1fr 340px; gap:18px; }
     .video-card {
-      background: #fff; border: 1px solid #e2e8f0;
-      border-radius: 12px; overflow: hidden;
+      background:#fff; border:1px solid #e2e8f0;
+      border-radius:12px; overflow:hidden;
     }
     .card-header {
-      padding: 13px 18px; border-bottom: 1px solid #e2e8f0;
-      display: flex; align-items: center; justify-content: space-between;
+      padding:13px 18px; border-bottom:1px solid #e2e8f0;
+      display:flex; align-items:center; justify-content:space-between;
     }
-    .card-title { font-size: 13px; font-weight: 600; color: #1e293b; }
+    .card-title { font-size:13px; font-weight:600; color:#1e293b; }
     .card-meta {
-      font-size: 11px; color: #94a3b8;
-      background: #f1f5f9; padding: 3px 10px; border-radius: 20px;
+      font-size:11px; color:#94a3b8;
+      background:#f1f5f9; padding:3px 10px; border-radius:20px;
     }
     .video-feed {
-      width: 100%; display: block;
-      min-height: 400px; object-fit: cover; background: #1e293b;
+      width:100%; display:block;
+      height:auto; background:#1e293b;
     }
     .video-footer {
-      padding: 10px 18px; border-top: 1px solid #f1f5f9;
-      display: flex; align-items: center; justify-content: space-between;
+      padding:10px 18px; border-top:1px solid #f1f5f9;
+      display:flex; align-items:center; justify-content:space-between;
     }
-    .now-playing { font-size: 12px; color: #64748b; }
-    .now-playing span { font-weight: 600; color: #3b82f6; }
+    .now-playing { font-size:12px; color:#64748b; }
+    .now-playing span { font-weight:600; color:#3b82f6; }
 
     /* ZONE PANEL */
-    .zone-panel { display: flex; flex-direction: column; gap: 14px; }
+    .zone-panel { display:flex; flex-direction:column; gap:14px; }
     .zone-card {
-      background: #fff; border: 1px solid #e2e8f0;
-      border-radius: 12px; padding: 16px 18px;
-      transition: box-shadow 0.3s, border-color 0.3s;
+      background:#fff; border:1px solid #e2e8f0;
+      border-radius:12px; padding:16px 18px;
+      transition:box-shadow .3s, border-color .3s;
     }
-    .zone-card.occupied { box-shadow: 0 0 0 2px rgba(59,130,246,0.15); }
-    .zone-card.alert {
-      border-color: #ef4444;
-      animation: alertPulse 1.2s ease-in-out infinite;
-    }
-    .zone-top {
-      display: flex; align-items: center;
-      justify-content: space-between; margin-bottom: 4px;
-    }
-    .zone-name {
-      display: flex; align-items: center; gap: 8px;
-      font-weight: 600; font-size: 13px; color: #1e293b;
-    }
-    .zone-dot { width: 9px; height: 9px; border-radius: 50%; }
-    .zone-sublabel {
-      font-size: 11px; color: #94a3b8; font-weight: 400;
-      margin-left: 17px; margin-bottom: 10px;
-    }
-    .status-pill {
-      font-size: 10px; padding: 3px 9px;
-      border-radius: 20px; font-weight: 600;
-    }
-    .status-occupied { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
-    .status-empty    { background: #f8fafc; color: #94a3b8; border: 1px solid #e2e8f0; }
-    .status-alert    { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-    .zone-metrics {
-      display: grid; grid-template-columns: repeat(3, 1fr);
-      gap: 8px; margin-bottom: 12px;
-    }
-    .metric { background: #f8fafc; border-radius: 8px; padding: 9px 6px; text-align: center; }
-    .metric-val { font-size: 20px; font-weight: 700; color: #1e293b; }
-    .metric-lbl {
-      font-size: 9px; color: #94a3b8;
-      text-transform: uppercase; letter-spacing: 0.05em;
-      margin-top: 2px; font-weight: 500;
-    }
-    .bar-row {
-      display: flex; justify-content: space-between;
-      font-size: 10px; color: #94a3b8; margin-bottom: 4px;
-    }
-    .bar-track { height: 5px; background: #f1f5f9; border-radius: 3px; overflow: hidden; }
-    .bar-fill  { height: 100%; border-radius: 3px; transition: width 0.5s ease, background 0.3s; }
+    .zone-card.occupied { box-shadow:0 0 0 2px rgba(59,130,246,.15); }
+    .zone-card.alert    { border-color:#ef4444; animation:alertPulse 1.2s ease-in-out infinite; }
+    .zone-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
+    .zone-name { display:flex; align-items:center; gap:8px; font-weight:600; font-size:13px; color:#1e293b; }
+    .zone-dot  { width:9px; height:9px; border-radius:50%; }
+    .zone-sublabel { font-size:11px; color:#94a3b8; font-weight:400; margin-left:17px; margin-bottom:10px; }
+    .status-pill    { font-size:10px; padding:3px 9px; border-radius:20px; font-weight:600; }
+    .status-occupied{ background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; }
+    .status-empty   { background:#f8fafc; color:#94a3b8; border:1px solid #e2e8f0; }
+    .status-alert   { background:#fef2f2; color:#dc2626; border:1px solid #fecaca; }
+    .zone-metrics   { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+    .metric         { background:#f8fafc; border-radius:8px; padding:9px 6px; text-align:center; }
+    .metric-val     { font-size:20px; font-weight:700; color:#1e293b; }
+    .metric-lbl     { font-size:9px; color:#94a3b8; text-transform:uppercase; letter-spacing:.05em; margin-top:2px; font-weight:500; }
+    .bar-row        { display:flex; justify-content:space-between; font-size:10px; color:#94a3b8; margin-bottom:4px; }
+    .bar-track      { height:5px; background:#f1f5f9; border-radius:3px; overflow:hidden; }
+    .bar-fill       { height:100%; border-radius:3px; transition:width .5s ease, background .3s; }
 
-    /* ── ACTIVITY HEATMAP GRID ──────────────────────────────────────────────── */
-    .heatmap-panel {
+    /* ── BEHAVIOR MODEL PANEL ─────────────────────────────────────────────── */
+    .model-panel {
+      /* The behavior-model controls are intentionally removed from the
+         operational dashboard. Training remains available through the API. */
+      display:none;
+      background:#fff; border:1px solid #e2e8f0;
+      border-radius:12px; padding:18px 20px; margin-top:20px;
+    }
+    .model-panel-header {
+      display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;
+    }
+    .model-panel-title {
+      font-size:12px; font-weight:600; color:#94a3b8;
+      text-transform:uppercase; letter-spacing:.06em;
+    }
+    .model-status-badge {
+      font-size:11px; font-weight:600; padding:3px 10px;
+      border-radius:20px;
+    }
+    .badge-untrained { background:#f8fafc; color:#94a3b8; border:1px solid #e2e8f0; }
+    .badge-trained   { background:#eff6ff; color:#1d4ed8; border:1px solid #93c5fd; }
+    .badge-training  { background:#fffbeb; color:#92400e; border:1px solid #fcd34d; }
+    .badge-collecting{ background:#f0fdf4; color:#15803d; border:1px solid #86efac; }
+
+    /* Steps */
+    .steps { display:flex; flex-direction:column; gap:10px; }
+    .step  {
+      display:flex; align-items:flex-start; gap:12px;
+      padding:12px 14px; border-radius:10px;
+      border:1.5px solid #e2e8f0; background:#f8fafc;
+    }
+    .step.active  { border-color:#3b82f6; background:#eff6ff; }
+    .step.done    { border-color:#86efac; background:#f0fdf4; }
+    .step.running { border-color:#fcd34d; background:#fffbeb; }
+    .step-num {
+      width:22px; height:22px; border-radius:50%;
+      background:#e2e8f0; color:#64748b;
+      font-size:10px; font-weight:700;
+      display:flex; align-items:center; justify-content:center;
+      flex-shrink:0; margin-top:1px;
+    }
+    .step.done    .step-num { background:#22c55e; color:#fff; }
+    .step.active  .step-num { background:#3b82f6; color:#fff; }
+    .step.running .step-num { background:#f59e0b; color:#fff; animation:pulse .8s infinite; }
+    .step-body { flex:1; min-width:0; }
+    .step-title { font-size:12px; font-weight:600; color:#1e293b; margin-bottom:2px; }
+    .step-desc  { font-size:11px; color:#94a3b8; line-height:1.5; }
+    .step-action { margin-top:8px; }
+
+    /* Progress bar */
+    .prog-wrap   { margin-top:6px; }
+    .prog-label  { font-size:10px; color:#64748b; margin-bottom:3px; display:flex; justify-content:space-between; }
+    .prog-track  { height:5px; background:#e2e8f0; border-radius:3px; overflow:hidden; }
+    .prog-fill   { height:100%; border-radius:3px; background:#22c55e;
+                   transition:width .5s ease; }
+
+    /* Model weight slider row */
+    .weight-row {
+      display:flex; align-items:center; gap:10px;
+      padding:10px 14px; border-radius:10px;
+      border:1.5px solid #e2e8f0; background:#f8fafc;
+      margin-top:10px;
+    }
+    .weight-label { font-size:11px; color:#64748b; font-weight:600; white-space:nowrap; }
+    .weight-slider{ flex:1; accent-color:#3b82f6; }
+    .weight-val   { font-size:11px; font-weight:700; color:#1e293b; min-width:28px; text-align:right; }
+
+    /* Threshold row */
+    .thr-row {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:8px 14px; border-radius:8px;
+      border:1px solid #e2e8f0; background:#f8fafc;
+      font-size:11px; margin-top:8px;
+    }
+    .thr-label { color:#64748b; }
+    .thr-val   { font-weight:700; color:#1e293b; font-family:monospace; }
+
+    /* Buttons */
+    .btn-sm {
+      padding:6px 14px; border-radius:7px;
+      font-family:'Poppins',sans-serif; font-size:11px; font-weight:600;
+      cursor:pointer; border:1.5px solid; transition:all .15s;
+    }
+    .btn-green  { border-color:#22c55e; color:#15803d; background:#f0fdf4; }
+    .btn-green:hover  { background:#dcfce7; }
+    .btn-green.active { background:#22c55e; border-color:#22c55e; color:#fff; }
+    .btn-blue   { border-color:#3b82f6; color:#1d4ed8; background:#eff6ff; }
+    .btn-blue:hover   { background:#dbeafe; }
+    .btn-blue:disabled{ opacity:.45; cursor:not-allowed; }
+    .btn-red    { border-color:#ef4444; color:#dc2626; background:#fef2f2; }
+    .btn-red:hover    { background:#fee2e2; }
+
+    /* ── SUSPICIOUS PERSONS PANEL ─────────────────────────────────────────── */
+    .suspicious-panel {
+      background:#fff; border:1px solid #e2e8f0;
+      border-radius:12px; padding:18px 20px; margin-top:20px;
+    }
+    .suspicious-panel-header {
+      display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;
+    }
+    .suspicious-panel-title {
+      font-size:12px; font-weight:600; color:#94a3b8;
+      text-transform:uppercase; letter-spacing:.06em;
+      display:flex; align-items:center; gap:8px;
+    }
+    .suspicious-count-badge {
+      background:#fef2f2; color:#dc2626; border:1px solid #fecaca;
+      border-radius:20px; padding:2px 9px; font-size:11px; font-weight:700;
+    }
+    .suspicious-empty { text-align:center; color:#94a3b8; font-size:12px; padding:20px 0; }
+    .person-list  { display:flex; flex-direction:column; gap:8px; }
+    .person-row   {
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px; border-radius:10px;
+      border:1.5px solid #e2e8f0; background:#f8fafc;
+      transition:border-color .2s, background .2s;
+    }
+    .person-row.flagged        { border-color:#fca5a5; background:#fff5f5; }
+    .person-row.manual-flagged { border-color:#fdba74; background:#fff7ed; }
+    .person-row.target-locked  { border-color:#ef4444; background:#fef2f2; box-shadow:0 0 0 2px rgba(239,68,68,.15); }
+    .person-gid  { font-size:12px; font-weight:700; color:#1e293b; min-width:58px; flex-shrink:0; }
+    .person-zone { font-size:10px; color:#64748b; min-width:46px; flex-shrink:0; }
+    .person-score-wrap { flex:1; min-width:0; }
+    .person-score-bar-track { height:5px; background:#f1f5f9; border-radius:3px; overflow:hidden; margin-bottom:3px; }
+    .person-score-bar { height:100%; border-radius:3px; transition:width .4s ease, background .3s; }
+    .score-nums { display:flex; gap:8px; font-size:10px; color:#94a3b8; font-weight:600; flex-wrap:wrap; }
+    .score-ml   { color:#3b82f6; }
+    .score-rule { color:#f97316; }
+    .person-breakdown { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+    .breakdown-tag {
+      font-size:9px; font-weight:600; padding:2px 7px;
+      border-radius:10px; text-transform:uppercase; letter-spacing:.04em;
+    }
+    .tag-loitering        { background:#fef3c7; color:#92400e; }
+    .tag-erratic          { background:#ede9fe; color:#5b21b6; }
+    .tag-zone_hop         { background:#e0f2fe; color:#075985; }
+    .tag-reentry          { background:#ffedd5; color:#9a3412; }
+    .tag-counterflow      { background:#fce7f3; color:#9d174d; }
+    .tag-restricted_zone  { background:#fef2f2; color:#991b1b; }
+    .person-actions { display:flex; gap:5px; flex-shrink:0; }
+    .btn-track, .btn-flag {
+      padding:4px 10px; border-radius:6px; font-family:'Poppins',sans-serif;
+      font-size:10px; font-weight:600; cursor:pointer; border:1.5px solid;
+      transition:all .15s; white-space:nowrap;
+    }
+    .btn-track { border-color:#3b82f6; color:#3b82f6; background:transparent; }
+    .btn-track:hover  { background:#eff6ff; }
+    .btn-track.active { background:#ef4444; border-color:#ef4444; color:#fff; }
+    .btn-flag  { border-color:#f97316; color:#f97316; background:transparent; }
+    .btn-flag:hover   { background:#fff7ed; }
+    .btn-flag.active  { background:#f97316; border-color:#f97316; color:#fff; }
+
+    /* ── TOASTS ───────────────────────────────────────────────────────────── */
+    #toast-container {
+      position:fixed; top:80px; right:24px; z-index:999;
+      display:flex; flex-direction:column; gap:10px; pointer-events:none;
+    }
+    .toast {
+      background:#fff; border:1.5px solid #fca5a5; border-left:5px solid #ef4444;
+      border-radius:10px; padding:12px 16px; min-width:260px; max-width:320px;
+      box-shadow:0 4px 16px rgba(0,0,0,.10); pointer-events:all;
+      animation:slideIn .25s ease;
+    }
+    @keyframes slideIn { from{transform:translateX(40px);opacity:0} to{transform:translateX(0);opacity:1} }
+    @keyframes slideOut{ from{transform:translateX(0);opacity:1} to{transform:translateX(40px);opacity:0} }
+    .toast.hiding  { animation:slideOut .25s ease forwards; }
+    .toast-title   { font-size:12px; font-weight:700; color:#dc2626; display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+    .toast-body    { font-size:11px; color:#374151; }
+    .toast-scores  { font-size:10px; color:#64748b; margin-top:3px; }
+    .toast-tags    { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+
+    footer {
+      text-align:center; padding:18px; font-size:12px; color:#94a3b8;
+      border-top:1px solid #e2e8f0; margin-top:28px; background:#fff;
+    }
+
+    /* ── TABS NAVIGATION ── */
+    .tabs-navigation {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 22px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      padding: 6px;
+      border-radius: 12px;
+    }
+    .tab-nav-btn {
+      flex: 1;
+      padding: 12px;
+      background: transparent;
+      border: none;
+      font-family: 'Poppins', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: #64748b;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .tab-nav-btn:hover {
+      color: #3b82f6;
+      background: #f8fafc;
+    }
+    .tab-nav-btn.active {
+      color: #fff;
+      background: #3b82f6;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+    }
+    .tab-pane {
+      display: none;
+    }
+    .tab-pane.active {
+      display: block;
+    }
+
+    /* ── SEARCH TAB GRID ── */
+    .search-grid {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+    .search-card {
       background: #fff;
       border: 1px solid #e2e8f0;
       border-radius: 12px;
-      padding: 16px 18px;
-      margin-top: 18px;
+      padding: 20px;
     }
-    .heatmap-panel-title {
-      font-size: 12px; font-weight: 600; color: #94a3b8;
-      text-transform: uppercase; letter-spacing: 0.06em;
-      margin-bottom: 14px;
-    }
-    .heatmap-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .heatmap-row {
+    .search-card-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #1e293b;
+      margin-bottom: 16px;
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }
-    .heatmap-label {
+
+    /* Upload Zone */
+    .upload-zone {
+      border: 2px dashed #cbd5e1;
+      border-radius: 10px;
+      padding: 28px 16px;
+      text-align: center;
+      cursor: pointer;
+      background: #f8fafc;
+      transition: all 0.2s;
+      margin-bottom: 16px;
+    }
+    .upload-zone:hover {
+      border-color: #3b82f6;
+      background: #eff6ff;
+    }
+    .upload-zone-icon {
+      font-size: 32px;
+      margin-bottom: 8px;
+    }
+    .upload-zone-text {
+      font-size: 12px;
+      font-weight: 600;
+      color: #475569;
+    }
+    .upload-zone-sub {
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+    .file-input {
+      display: none;
+    }
+
+    /* Slider / Form inputs */
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-label {
       font-size: 11px;
       font-weight: 600;
       color: #64748b;
-      width: 56px;
-      flex-shrink: 0;
-    }
-    .heatmap-cells {
+      text-transform: uppercase;
+      margin-bottom: 6px;
       display: flex;
-      gap: 3px;
-      flex: 1;
+      justify-content: space-between;
     }
-    .heatmap-cell {
-      height: 18px;
-      border-radius: 3px;
-      flex: 1;
-      background: #f1f5f9;
-      transition: background 0.5s ease;
+    .form-input-slider {
+      width: 100%;
+      accent-color: #3b82f6;
     }
-    .heatmap-count {
-      font-size: 11px;
-      font-weight: 700;
-      color: #1e293b;
-      width: 32px;
-      text-align: right;
-      flex-shrink: 0;
-    }
-    .heatmap-legend {
+    .btn-search {
+      width: 100%;
+      padding: 12px;
+      background: #3b82f6;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
       display: flex;
       align-items: center;
-      gap: 6px;
-      margin-top: 12px;
-      font-size: 10px;
-      color: #94a3b8;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
     }
-    .legend-gradient {
-      flex: 1;
-      height: 6px;
-      border-radius: 3px;
-      background: linear-gradient(to right, #f1f5f9, #bbf7d0, #4ade80, #16a34a, #166534);
+    .btn-search:hover {
+      background: #2563eb;
+      box-shadow: 0 6px 16px rgba(37, 99, 235, 0.25);
+    }
+    .btn-search:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+      box-shadow: none;
     }
 
-    footer {
-      text-align: center; padding: 18px;
-      font-size: 12px; color: #94a3b8;
-      border-top: 1px solid #e2e8f0;
-      margin-top: 28px; background: #fff;
+    /* Image Preview */
+    .query-previews {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+    }
+    .query-preview-box {
+      flex: 1;
+      aspect-ratio: 3/4;
+      background: #f1f5f9;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #e2e8f0;
+      position: relative;
+    }
+    .query-preview-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .query-preview-lbl {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(15, 23, 42, 0.75);
+      color: #fff;
+      font-size: 9px;
+      font-weight: 600;
+      text-align: center;
+      padding: 4px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* Match Results */
+    .results-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .match-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      display: grid;
+      grid-template-columns: 90px 1fr 140px;
+      gap: 16px;
+      align-items: center;
+      transition: all 0.2s;
+    }
+    .match-card:hover {
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+      border-color: #3b82f6;
+    }
+    .match-crop-container {
+      width: 90px;
+      height: 120px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+    }
+    .match-crop {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .match-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .match-rank-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .match-rank {
+      font-size: 10px;
+      font-weight: 700;
+      background: #eff6ff;
+      color: #1d4ed8;
+      padding: 2px 8px;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+    .match-gid {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1e293b;
+    }
+    .match-similarity {
+      font-size: 12px;
+      font-weight: 600;
+      color: #16a34a;
+    }
+    .match-meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .match-meta-item {
+      font-size: 11px;
+      color: #64748b;
+    }
+    .match-meta-item span {
+      font-weight: 600;
+      color: #334155;
+    }
+    .match-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      justify-content: center;
+    }
+    .btn-timeline {
+      width: 100%;
+      padding: 8px 12px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1.5px solid #93c5fd;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+    .btn-timeline:hover {
+      background: #dbeafe;
+    }
+    .btn-timeline.active {
+      background: #3b82f6;
+      color: #fff;
+      border-color: #3b82f6;
+    }
+
+    /* History Logs */
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
+      border-radius: 8px;
+      border: 1px solid #e2e8f0;
+      background: #f8fafc;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .history-item:hover {
+      border-color: #3b82f6;
+      background: #eff6ff;
+    }
+    .history-thumb {
+      width: 32px;
+      height: 40px;
+      border-radius: 4px;
+      object-fit: cover;
+      border: 1px solid #cbd5e1;
+    }
+    .history-details {
+      flex: 1;
+      min-width: 0;
+    }
+    .history-time {
+      font-size: 9px;
+      color: #94a3b8;
+    }
+    .history-summary {
+      font-size: 11px;
+      font-weight: 600;
+      color: #334155;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    /* Vertical Timeline */
+    .timeline-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 20px;
+      margin-top: 20px;
+    }
+    .timeline-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #1e293b;
+      margin-bottom: 18px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .timeline-container {
+      position: relative;
+      padding-left: 28px;
+    }
+    .timeline-container::before {
+      content: '';
+      position: absolute;
+      left: 7px;
+      top: 8px;
+      bottom: 8px;
+      width: 2px;
+      background: #cbd5e1;
+    }
+    .timeline-node {
+      position: relative;
+      margin-bottom: 18px;
+    }
+    .timeline-node:last-child {
+      margin-bottom: 0;
+    }
+    .timeline-dot {
+      position: absolute;
+      left: -28px;
+      top: 6px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #3b82f6;
+      border: 3px solid #fff;
+      box-shadow: 0 0 0 2px #cbd5e1;
+    }
+    .timeline-content {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .timeline-content-left {
+      flex: 1;
+    }
+    .timeline-time {
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+    }
+    .timeline-cam-zone {
+      font-size: 13px;
+      font-weight: 700;
+      color: #1e293b;
+      margin: 2px 0;
+    }
+    .timeline-meta {
+      font-size: 11px;
+      color: #64748b;
+    }
+    .timeline-crop-box {
+      width: 60px;
+      height: 80px;
+      border-radius: 6px;
+      overflow: hidden;
+      border: 1px solid #cbd5e1;
+      background: #e2e8f0;
+    }
+    .timeline-crop {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
   </style>
 </head>
 <body>
+
+<div id="toast-container"></div>
 
 <header>
   <div class="logo">
@@ -297,6 +787,13 @@
     </div>
   </div>
   <div class="header-right">
+    <button class="vid-btn active" id="btn-reset-db" onclick="resetDatabase()" style="background:#ef4444; border-color:#ef4444; color:#fff; padding:6px 12px; font-size:11px; height:32px; display:flex; align-items:center; gap:6px; border-radius:6px; box-shadow: 0 4px 10px rgba(239,68,68,0.2); font-weight:600; cursor:pointer;">
+      🗑️ Reset Data
+    </button>
+    <div class="model-pill" id="header-model-pill">
+      <div class="model-pill-dot"></div>
+      <span id="header-model-text">Rules only</span>
+    </div>
     <div class="live-pill"><div class="live-dot"></div>Live</div>
     <div class="clock" id="clock">--:--:--</div>
   </div>
@@ -304,37 +801,47 @@
 
 <div class="page">
 
+  <!-- TABS NAVIGATION -->
+  <div class="tabs-navigation">
+    <button class="tab-nav-btn active" id="tab-nav-dashboard" onclick="switchTab('dashboard')">
+      📊 Operational Surveillance
+    </button>
+    <button class="tab-nav-btn" id="tab-nav-search" onclick="switchTab('search')">
+      🔍 Person Search / Query by Image
+    </button>
+  </div>
+
+  <div id="dashboard-tab" class="tab-pane active">
+
   <!-- CAMERA SELECTOR -->
   <div class="selector-section">
     <div class="selector-title">Select Camera Feed</div>
     <div class="video-buttons">
-
-      <button class="vid-btn active" data-video="cam1" onclick="switchVideo('cam1', this)">
-        Camera 1
-        <span class="btn-desc">Mall Dataset — Indoor retail</span>
+      <button class="vid-btn active" data-video="cam1" onclick="switchVideo('cam1',this)">
+        Camera 1 <span class="btn-desc">Wildtrack — View 1</span>
       </button>
-
-      <button class="vid-btn" data-video="cam2" onclick="switchVideo('cam2', this)">
-        Camera 2
-        <span class="btn-desc">Normal Crowd — Outdoor walkway</span>
+      <button class="vid-btn" data-video="cam2" onclick="switchVideo('cam2',this)">
+        Camera 2 <span class="btn-desc">Wildtrack — View 2</span>
       </button>
-
-      <button class="vid-btn" data-video="cam3" onclick="switchVideo('cam3', this)">
-        Camera 3
-        <span class="btn-desc">Low Light — Poor visibility</span>
+      <button class="vid-btn" data-video="cam3" onclick="switchVideo('cam3',this)">
+        Camera 3 <span class="btn-desc">Wildtrack — View 3</span>
       </button>
-
-      <button class="vid-btn live-btn" data-video="live" onclick="switchVideo('live', this)">
+      <button class="vid-btn" data-video="cam4" onclick="switchVideo('cam4',this)">
+        Camera 4 <span class="btn-desc">Wildtrack — View 4</span>
+      </button>
+      <button class="vid-btn" data-video="cam5" onclick="switchVideo('cam5',this)">
+        Camera 5 <span class="btn-desc">Wildtrack — View 5</span>
+      </button>
+      <button class="vid-btn" data-video="cam6" onclick="switchVideo('cam6',this)">
+        Camera 6 <span class="btn-desc">Wildtrack — View 6</span>
+      </button>
+      <button class="vid-btn" data-video="cam7" onclick="switchVideo('cam7',this)">
+        Camera 7 <span class="btn-desc">Wildtrack — View 7</span>
+      </button>
+      <button class="vid-btn live-btn" data-video="live" onclick="switchVideo('live',this)">
         <span class="live-cam-dot"></span>Live Camera
-        <span class="btn-desc">Webcam — Real-time input</span>
+        <span class="btn-desc">Webcam — Input</span>
       </button>
-
-      <div class="divider"></div>
-
-      <button class="flow-btn" id="flow-btn" onclick="toggleFlow()">
-        ➡ Flow: OFF
-      </button>
-
     </div>
   </div>
 
@@ -370,7 +877,7 @@
         <div class="card-title">Live Detection Feed</div>
         <div class="card-meta" id="cam-label">Camera 1</div>
       </div>
-      <img class="video-feed" src="/video_feed" alt="Live Feed"/>
+      <img class="video-feed" id="video-canvas" src="/video_feed" alt="Live Feed"/>
       <div class="video-footer">
         <div class="now-playing">Now playing: <span id="now-playing-label">Camera 1</span></div>
         <div class="now-playing">YOLOv8 + StrongSort + OSNet</div>
@@ -382,10 +889,7 @@
       <!-- ZONE A -->
       <div class="zone-card" id="card-a">
         <div class="zone-top">
-          <div class="zone-name">
-            <div class="zone-dot" style="background:#3b82f6"></div>
-            Zone A
-          </div>
+          <div class="zone-name"><div class="zone-dot" style="background:#3b82f6"></div>Zone A</div>
           <div class="status-pill status-empty" id="status-a">Empty</div>
         </div>
         <div class="zone-sublabel">Store Entrance</div>
@@ -401,10 +905,7 @@
       <!-- ZONE B -->
       <div class="zone-card" id="card-b">
         <div class="zone-top">
-          <div class="zone-name">
-            <div class="zone-dot" style="background:#22c55e"></div>
-            Zone B
-          </div>
+          <div class="zone-name"><div class="zone-dot" style="background:#22c55e"></div>Zone B</div>
           <div class="status-pill status-empty" id="status-b">Empty</div>
         </div>
         <div class="zone-sublabel">Food Court</div>
@@ -420,10 +921,7 @@
       <!-- ZONE C -->
       <div class="zone-card" id="card-c">
         <div class="zone-top">
-          <div class="zone-name">
-            <div class="zone-dot" style="background:#f97316"></div>
-            Zone C
-          </div>
+          <div class="zone-name"><div class="zone-dot" style="background:#f97316"></div>Zone C</div>
           <div class="status-pill status-empty" id="status-c">Empty</div>
         </div>
         <div class="zone-sublabel">Exit Corridor</div>
@@ -436,195 +934,1045 @@
         <div class="bar-track"><div class="bar-fill" id="c-bar" style="width:0%;background:#f97316"></div></div>
       </div>
 
-      <!-- ACTIVITY HEATMAP GRID -->
-      <div class="heatmap-panel">
-        <div class="heatmap-panel-title">Zone Activity Heatmap</div>
-        <div class="heatmap-grid">
+    </div><!-- end zone-panel -->
+  </div><!-- end main-grid -->
 
-          <div class="heatmap-row">
-            <div class="heatmap-label">Zone A</div>
-            <div class="heatmap-cells" id="hm-cells-a"></div>
-            <div class="heatmap-count" id="hm-count-a">0</div>
+  <!-- ── BEHAVIOR MODEL PANEL ─────────────────────────────────────────────── -->
+  <template id="removed-behavior-model-panel">
+    <div class="model-panel-header">
+      <div class="model-panel-title">🧠 Behavior Model — LSTM Autoencoder</div>
+      <div class="model-status-badge badge-untrained" id="model-badge">Not trained</div>
+    </div>
+
+    <div class="steps">
+
+      <!-- Step 1: Collect -->
+      <div class="step active" id="step-1">
+        <div class="step-num" id="step1-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Collect Normal Trajectories</div>
+          <div class="step-desc">
+            Run the tracker in collection mode on your normal-behaviour videos.
+            Minimum <strong>200 sequences</strong> recommended.
           </div>
-
-          <div class="heatmap-row">
-            <div class="heatmap-label">Zone B</div>
-            <div class="heatmap-cells" id="hm-cells-b"></div>
-            <div class="heatmap-count" id="hm-count-b">0</div>
+          <div class="prog-wrap" id="collect-prog-wrap" style="display:none">
+            <div class="prog-label">
+              <span>Sequences collected</span>
+              <span id="seq-count-label">0 / 200</span>
+            </div>
+            <div class="prog-track">
+              <div class="prog-fill" id="seq-prog-bar" style="width:0%"></div>
+            </div>
           </div>
-
-          <div class="heatmap-row">
-            <div class="heatmap-label">Zone C</div>
-            <div class="heatmap-cells" id="hm-cells-c"></div>
-            <div class="heatmap-count" id="hm-count-c">0</div>
+          <div class="step-action" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
+            <button class="btn-sm btn-green" id="btn-collect" onclick="toggleCollect()">
+              ▶ Start Collecting
+            </button>
+            <button class="btn-sm btn-red" id="btn-clear-data" onclick="clearData()" style="display:none">
+              ✕ Clear Data
+            </button>
           </div>
-
-        </div>
-        <div class="heatmap-legend">
-          <span>Low</span>
-          <div class="legend-gradient"></div>
-          <span>High</span>
         </div>
       </div>
 
+      <!-- Step 2: Train -->
+      <div class="step" id="step-2">
+        <div class="step-num" id="step2-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Train the Autoencoder</div>
+          <div class="step-desc" id="train-desc">
+            Trains an LSTM autoencoder on the collected sequences (~30–60 s on CPU).
+            The model learns what <em>normal</em> movement looks like.
+          </div>
+          <div class="step-action" style="margin-top:8px;">
+            <button class="btn-sm btn-blue" id="btn-train" onclick="trainModel()" disabled>
+              ⚙ Train Model
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Active -->
+      <div class="step" id="step-3">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Model Active</div>
+          <div class="step-desc" id="active-desc">
+            Hybrid scoring: ML score × <strong id="ml-w-disp">60%</strong> +
+            Rule score × <strong id="rule-w-disp">40%</strong>.
+            Anomaly threshold: <span id="thr-disp" style="font-family:monospace">—</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end steps -->
+
+    <!-- ML/Rule weight slider (shown once trained) -->
+    <div class="weight-row" id="weight-row" style="display:none">
+      <span class="weight-label">ML weight</span>
+      <input type="range" class="weight-slider" id="weight-slider"
+             min="0" max="100" value="60" oninput="updateWeightDisplay(this.value)">
+      <span class="weight-val" id="weight-val-disp">60%</span>
+    </div>
+
+    <!-- Threshold display -->
+    <div class="thr-row" id="thr-row" style="display:none">
+      <span class="thr-label">Anomaly threshold (95th pct of training errors)</span>
+      <span class="thr-val" id="thr-val-disp">—</span>
+    </div>
+
+  </template>
+
+  <!-- ── SUSPICIOUS PERSONS PANEL ──────────────────────────────────────────── -->
+  <div class="suspicious-panel">
+    <div class="suspicious-panel-header">
+      <div class="suspicious-panel-title">
+        🚨 Suspicious Persons
+        <span class="suspicious-count-badge" id="suspicious-badge">0</span>
+      </div>
+      <div style="font-size:11px;color:#94a3b8;">
+        <span style="color:#3b82f6;font-weight:600;">■</span> ML &nbsp;
+        <span style="color:#f97316;font-weight:600;">■</span> Rule &nbsp;·&nbsp;
+        <span style="color:#ef4444;font-weight:600;">■</span> auto &nbsp;
+        <span style="color:#f97316;font-weight:600;">■</span> manual &nbsp;
+        <span style="color:#ef4444;font-weight:600;">⊕</span> target
+      </div>
+    </div>
+    <!-- Manual GID Flag Input -->
+    <div style="display:flex; gap:8px; margin-bottom:12px; align-items:center; padding: 0 4px;">
+      <input type="number" id="manual-flag-input" placeholder="Enter GID to flag (e.g. 5)" style="padding:6px 10px; border-radius:6px; border:1.5px solid #e2e8f0; font-size:12px; font-family:inherit; flex:1; outline:none;" />
+      <button onclick="manualFlagSubmit()" style="padding:6px 14px; border-radius:6px; background:#f97316; border:none; color:white; font-size:12px; font-family:inherit; font-weight:600; cursor:pointer; transition:background 0.2s;">⚑ Toggle Flag</button>
+    </div>
+    <div id="person-list-wrap">
+      <div class="suspicious-empty" id="person-list-empty">No suspicious activity detected</div>
+      <div class="person-list" id="person-list"></div>
     </div>
   </div>
-</div>
+
+  </div><!-- end dashboard-tab -->
+
+  <!-- PERSON SEARCH / QUERY BY IMAGE TAB -->
+  <div id="search-tab" class="tab-pane">
+    <div class="search-grid">
+      <!-- Left Column: Search & Upload -->
+      <div class="search-card">
+        <div class="search-card-title">⚙ Query Configuration</div>
+        
+        <!-- Drag and drop zone -->
+        <div class="upload-zone" id="upload-dropzone" onclick="document.getElementById('query-file-input').click()">
+          <div class="upload-zone-icon">📤</div>
+          <div class="upload-zone-text">Upload Person Image</div>
+          <div class="upload-zone-sub">Drag & drop or click to browse</div>
+          <input type="file" id="query-file-input" class="file-input" accept="image/*" onchange="handleFileSelect(event)"/>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="search-threshold">
+            Similarity Threshold
+            <span id="search-threshold-val">0.78</span>
+          </label>
+          <input type="range" class="form-input-slider" id="search-threshold" min="0.5" max="0.95" step="0.01" value="0.78" oninput="document.getElementById('search-threshold-val').textContent = this.value"/>
+          <div style="font-size: 10px; color: #94a3b8; margin-top: 4px; line-height: 1.3;">
+            Note: Person Re-ID models require <strong>full-body</strong> crops (head to toe). Close-up face/shoulder crops will result in low similarity or false matches. Valid matches typically score &ge; 0.78.
+          </div>
+        </div>
+
+        <button class="btn-search" id="btn-run-search" onclick="runPersonSearch()" disabled>
+          ⚡ Search Database
+        </button>
+
+        <!-- Query Previews -->
+        <div class="query-previews" id="query-previews-section" style="display: none;">
+          <div class="query-preview-box">
+            <img class="query-preview-img" id="img-preview-original" src="" alt="Query Original"/>
+            <div class="query-preview-lbl">Original Query</div>
+          </div>
+          <div class="query-preview-box">
+            <img class="query-preview-img" id="img-preview-crop" src="" alt="Query Crop"/>
+            <div class="query-preview-lbl">YOLO Crop</div>
+          </div>
+        </div>
+
+        <!-- Search History -->
+        <div style="margin-top: 24px;">
+          <div class="search-card-title" style="margin-bottom: 8px;">🕰 Recent Searches</div>
+          <div class="history-list" id="search-history-list">
+            <div style="text-align: center; color: #94a3b8; font-size: 11px; padding: 12px 0;">No recent searches</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Results & Timeline -->
+      <div style="display: flex; flex-direction: column; gap: 20px;">
+        <div class="search-card">
+          <div class="search-card-title">🏆 Match Results</div>
+          <div id="search-results-empty" style="text-align: center; color: #94a3b8; font-size: 12px; padding: 30px 0;">
+            Upload an image and run search to display similarity matches.
+          </div>
+          <div class="results-wrap" id="search-results-container" style="display: none;"></div>
+        </div>
+
+        <!-- Appearance Timeline -->
+        <div class="timeline-card" id="timeline-section" style="display: none;">
+          <div class="timeline-title">
+            📅 Sighting Timeline &bull; GID <span id="timeline-gid-label">-</span>
+          </div>
+          <div class="timeline-container" id="timeline-nodes-container"></div>
+        </div>
+      </div>
+    </div>
+  </div><!-- end search-tab -->
+
+</div><!-- end page -->
 
 <footer>AcuTrack — An ID-Persistent Retail Analytics Platform</footer>
 
 <script>
+  // ── CLOCK ──────────────────────────────────────────────────────────────────
   setInterval(() => {
-    document.getElementById('clock').textContent = new Date().toTimeString().slice(0, 8);
+    document.getElementById('clock').textContent = new Date().toTimeString().slice(0,8);
   }, 1000);
 
   const socket = io();
 
-  const CAM_LABELS = {
-    cam1: "Camera 1",
-    cam2: "Camera 2",
-    cam3: "Camera 3",
-    live: "Live Camera"
-  };
+  // ── SOCKET.IO VIDEO STREAMING (Base64 method) ─────────────────────────────
+  const videoFeedEl = document.getElementById('video-canvas');
 
+  // Commented out to use native MJPEG stream via /video_feed, saving memory & CPU
+  // socket.on('video_frame', function(data) {
+  //   if (!videoFeedEl) return;
+  //   videoFeedEl.src = 'data:image/jpeg;base64,' + data.image;
+  // });
+
+  const CAM_LABELS = { cam1:'Camera 1', cam2:'Camera 2', cam3:'Camera 3', cam4:'Camera 4', cam5:'Camera 5', cam6:'Camera 6', cam7:'Camera 7', live:'Live Camera' };
   const ZONE_COLORS = {
-    a: { normal: '#3b82f6', alert: '#ef4444' },
-    b: { normal: '#22c55e', alert: '#ef4444' },
-    c: { normal: '#f97316', alert: '#ef4444' },
+    a:{normal:'#3b82f6',alert:'#ef4444'},
+    b:{normal:'#22c55e',alert:'#ef4444'},
+    c:{normal:'#f97316',alert:'#ef4444'},
   };
 
-  // ── ACTIVITY HEATMAP GRID ────────────────────────────────────────────────────
-  const HISTORY_LEN = 20;
-  const zoneHistory = { a: [], b: [], c: [] };
-
-  ['a', 'b', 'c'].forEach(p => {
-    const container = document.getElementById(`hm-cells-${p}`);
-    for (let i = 0; i < HISTORY_LEN; i++) {
-      const cell = document.createElement('div');
-      cell.className = 'heatmap-cell';
-      cell.id = `hm-cell-${p}-${i}`;
-      container.appendChild(cell);
-    }
-  });
-
-  function getHeatColor(intensity) {
-    if (intensity <= 0)   return '#f1f5f9';
-    if (intensity < 0.2)  return '#dcfce7';
-    if (intensity < 0.4)  return '#86efac';
-    if (intensity < 0.6)  return '#4ade80';
-    if (intensity < 0.8)  return '#16a34a';
-    return '#166534';
-  }
-
-  function updateHeatmap(p, footfall) {
-    const history = zoneHistory[p];
-    history.push(footfall);
-    if (history.length > HISTORY_LEN) history.shift();
-    const max = Math.max(...history, 1);
-    for (let i = 0; i < HISTORY_LEN; i++) {
-      const cell = document.getElementById(`hm-cell-${p}-${i}`);
-      if (!cell) continue;
-      const val = history[i] !== undefined ? history[i] : 0;
-      cell.style.background = getHeatColor(val / max);
-      cell.title = `Footfall: ${val}`;
-    }
-    document.getElementById(`hm-count-${p}`).textContent = footfall;
-  }
-
-  // ── VIDEO SWITCH ─────────────────────────────────────────────────────────────
-  function switchVideo(key, btn) {
-    document.querySelectorAll('.vid-btn').forEach(b => b.classList.remove('active'));
+  // ── VIDEO SWITCH ───────────────────────────────────────────────────────────
+  function switchVideo(key,btn){
+    document.querySelectorAll('.vid-btn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
-    const label = CAM_LABELS[key] || key;
+    const label = CAM_LABELS[key]||key;
     document.getElementById('cam-label').textContent = label;
     document.getElementById('now-playing-label').textContent = label;
-    fetch('/switch_video', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ video: key })
+    fetch('/switch_video',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({video:key})
+    })
+    .then(r => r.json())
+    .then(data => {
+      if (videoFeedEl) {
+        videoFeedEl.src = '/video_feed?t=' + Date.now();
+      }
     });
     ['total-count','fa-footfall','fb-footfall','fc-footfall',
      'a-count','a-footfall','b-count','b-footfall','c-count','c-footfall']
-      .forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '0'; });
-    ['a-dwell','b-dwell','c-dwell'].forEach(id => {
-      const el = document.getElementById(id); if (el) el.textContent = '0s';
-    });
-    ['a-bar','b-bar','c-bar'].forEach(id => {
-      const el = document.getElementById(id); if (el) el.style.width = '0%';
-    });
-    ['a','b','c'].forEach(p => {
+      .forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='0';});
+    ['a-dwell','b-dwell','c-dwell'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='0s';});
+    ['a-bar','b-bar','c-bar'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.width='0%';});
+    ['a','b','c'].forEach(p=>{
       document.getElementById(`card-${p}`).classList.remove('alert','occupied');
-      document.getElementById(`status-${p}`).className = 'status-pill status-empty';
-      document.getElementById(`status-${p}`).textContent = 'Empty';
-      zoneHistory[p] = [];
-      updateHeatmap(p, 0);
+      document.getElementById(`status-${p}`).className='status-pill status-empty';
+      document.getElementById(`status-${p}`).textContent='Empty';
     });
+    personState={}; trackedGids.clear(); renderPersonList([]);
   }
 
-  // ── FLOW TOGGLE ──────────────────────────────────────────────────────────────
-  let flowOn = false;
-  function toggleFlow() {
-    fetch('/toggle_flow', { method: 'POST' })
-      .then(r => r.json())
-      .then(data => {
-        flowOn = data.flow;
-        const btn = document.getElementById('flow-btn');
-        btn.textContent = flowOn ? '➡ Flow: ON' : '➡ Flow: OFF';
-        btn.className = flowOn ? 'flow-btn on' : 'flow-btn';
-      });
-  }
-
-  // ── STATS UPDATE ─────────────────────────────────────────────────────────────
-  socket.on('stats', function(data) {
-    document.getElementById('total-count').textContent = data.total;
-
+  // ── STATS UPDATE ───────────────────────────────────────────────────────────
+  socket.on('stats', function(data){
+    const totalEl = document.getElementById('total-count');
+    if (totalEl && totalEl.textContent !== String(data.total)) {
+      totalEl.textContent = data.total;
+    }
     const map = {
-      "Zone A": { p: "a", top: "fa-footfall" },
-      "Zone B": { p: "b", top: "fb-footfall" },
-      "Zone C": { p: "c", top: "fc-footfall" },
+      'Zone A':{p:'a',top:'fa-footfall'},
+      'Zone B':{p:'b',top:'fb-footfall'},
+      'Zone C':{p:'c',top:'fc-footfall'},
     };
-
-    for (const [zone, ids] of Object.entries(map)) {
-      const z = data.zones[zone];
-      if (!z) continue;
+    for(const [zone,ids] of Object.entries(map)){
+      const z = data.zones[zone]; if(!z) continue;
       const p = ids.p;
-
-      document.getElementById(`${p}-count`).textContent    = z.count;
-      document.getElementById(`${p}-footfall`).textContent = z.footfall;
-      document.getElementById(`${p}-dwell`).textContent    = z.dwell + 's';
-      document.getElementById(ids.top).textContent         = z.footfall;
-
-      const capacity = z.capacity || 10;
-      const pct = Math.min(100, Math.round((z.count / capacity) * 100));
+      
+      const countEl = document.getElementById(`${p}-count`);
+      if (countEl && countEl.textContent !== String(z.count)) {
+        countEl.textContent = z.count;
+      }
+      const footfallEl = document.getElementById(`${p}-footfall`);
+      if (footfallEl && footfallEl.textContent !== String(z.footfall)) {
+        footfallEl.textContent = z.footfall;
+      }
+      const dwellEl = document.getElementById(`${p}-dwell`);
+      const newDwellText = z.dwell + 's';
+      if (dwellEl && dwellEl.textContent !== newDwellText) {
+        dwellEl.textContent = newDwellText;
+      }
+      const topEl = document.getElementById(ids.top);
+      if (topEl && topEl.textContent !== String(z.footfall)) {
+        topEl.textContent = z.footfall;
+      }
+      
+      const cap = z.capacity||10;
+      const pct = Math.min(100,Math.round((z.count/cap)*100));
+      const pctText = pct + '%';
+      
       const barEl = document.getElementById(`${p}-bar`);
-      barEl.style.width = pct + '%';
-      document.getElementById(`${p}-pct`).textContent = pct + '%';
-
+      if (barEl && barEl.style.width !== pctText) {
+        barEl.style.width = pctText;
+      }
+      const pctEl = document.getElementById(`${p}-pct`);
+      if (pctEl && pctEl.textContent !== pctText) {
+        pctEl.textContent = pctText;
+      }
+      
       const statusEl = document.getElementById(`status-${p}`);
       const cardEl   = document.getElementById(`card-${p}`);
-
-      if (z.alert) {
-        cardEl.classList.add('alert');
-        cardEl.classList.remove('occupied');
-        statusEl.textContent = '! Overcrowded';
-        statusEl.className   = 'status-pill status-alert';
-        barEl.style.background = ZONE_COLORS[p].alert;
-      } else if (z.count > 0) {
-        cardEl.classList.remove('alert');
-        cardEl.classList.add('occupied');
-        statusEl.textContent = 'Occupied';
-        statusEl.className   = 'status-pill status-occupied';
-        barEl.style.background = ZONE_COLORS[p].normal;
+      
+      if(z.alert){
+        if (cardEl && !cardEl.classList.contains('alert')) {
+          cardEl.classList.add('alert');
+          cardEl.classList.remove('occupied');
+        }
+        if (statusEl && statusEl.textContent !== '! Overcrowded') {
+          statusEl.textContent = '! Overcrowded';
+          statusEl.className = 'status-pill status-alert';
+        }
+        const alertBg = ZONE_COLORS[p].alert;
+        if (barEl && barEl.style.background !== alertBg) {
+          barEl.style.background = alertBg;
+        }
+      } else if(z.count>0){
+        if (cardEl && (!cardEl.classList.contains('occupied') || cardEl.classList.contains('alert'))) {
+          cardEl.classList.remove('alert');
+          cardEl.classList.add('occupied');
+        }
+        if (statusEl && statusEl.textContent !== 'Occupied') {
+          statusEl.textContent = 'Occupied';
+          statusEl.className = 'status-pill status-occupied';
+        }
+        const normalBg = ZONE_COLORS[p].normal;
+        if (barEl && barEl.style.background !== normalBg) {
+          barEl.style.background = normalBg;
+        }
       } else {
-        cardEl.classList.remove('alert', 'occupied');
-        statusEl.textContent = 'Empty';
-        statusEl.className   = 'status-pill status-empty';
-        barEl.style.background = ZONE_COLORS[p].normal;
+        if (cardEl && (cardEl.classList.contains('occupied') || cardEl.classList.contains('alert'))) {
+          cardEl.classList.remove('alert', 'occupied');
+        }
+        if (statusEl && statusEl.textContent !== 'Empty') {
+          statusEl.textContent = 'Empty';
+          statusEl.className = 'status-pill status-empty';
+        }
+        const normalBg = ZONE_COLORS[p].normal;
+        if (barEl && barEl.style.background !== normalBg) {
+          barEl.style.background = normalBg;
+        }
       }
-
-      updateHeatmap(p, z.footfall);
     }
   });
+
+  // ── AE STATUS UPDATE ───────────────────────────────────────────────────────
+  socket.on('ae_training_done', function(data){
+    if(data.success){
+      showToast({
+        title:'✓ Model trained',
+        body:`Anomaly threshold: ${data.threshold?.toFixed(5) ?? '—'}`,
+        color:'#22c55e', borderColor:'#86efac'
+      });
+    } else {
+      showToast({title:'✗ Training failed', body: data.error||'Check server logs', color:'#ef4444', borderColor:'#fca5a5'});
+    }
+    // Refresh ae_status
+    fetch('/ae_status').then(r=>r.json()).then(updateModelPanel);
+  });
+
+  function updateModelPanel(ae){
+    // The controls are not mounted in the operational dashboard.
+    if(!document.getElementById('model-badge')) return;
+    const badge  = document.getElementById('model-badge');
+    const step1  = document.getElementById('step-1');
+    const step2  = document.getElementById('step-2');
+    const step3  = document.getElementById('step-3');
+    const s1num  = document.getElementById('step1-num');
+    const s2num  = document.getElementById('step2-num');
+    const trainBtn = document.getElementById('btn-train');
+    const collectBtn = document.getElementById('btn-collect');
+    const clearBtn   = document.getElementById('btn-clear-data');
+    const progWrap   = document.getElementById('collect-prog-wrap');
+    const seqLabel   = document.getElementById('seq-count-label');
+    const progBar    = document.getElementById('seq-prog-bar');
+    const pill       = document.getElementById('header-model-pill');
+    const pillText   = document.getElementById('header-model-text');
+
+    const pct = Math.min(100, Math.round((ae.seq_count/ae.min_seqs)*100));
+    if(seqLabel) seqLabel.textContent = `${ae.seq_count} / ${ae.min_seqs}`;
+    if(progBar)  progBar.style.width  = pct+'%';
+
+    // Show progress bar + clear button if collecting or have data
+    if(ae.seq_count>0 || ae.training_mode){
+      progWrap.style.display='';
+      clearBtn.style.display='';
+    }
+
+    // Train button enabled when enough seqs
+    if(trainBtn) trainBtn.disabled = (ae.seq_count<ae.min_seqs || ae.training_now);
+
+    // Step states
+    if(ae.training_now){
+      step2.className='step running'; s2num.textContent='2';
+      badge.className='model-status-badge badge-training';
+      badge.textContent='Training…';
+      if(trainBtn){ trainBtn.textContent='⏳ Training…'; trainBtn.disabled=true; }
+      pill.className='model-pill training'; pillText.textContent='Training…';
+    } else if(ae.trained){
+      step1.className='step done'; s1num.textContent='✓';
+      step2.className='step done'; s2num.textContent='✓';
+      step3.className='step done';
+      badge.className='model-status-badge badge-trained';
+      badge.textContent='ML + Rules active';
+      if(trainBtn){ trainBtn.textContent='↺ Retrain'; trainBtn.disabled=false; }
+      // Show weight/threshold controls
+      document.getElementById('weight-row').style.display='';
+      document.getElementById('thr-row').style.display='';
+      document.getElementById('thr-val-disp').textContent = ae.threshold?.toFixed(5)??'—';
+      document.getElementById('thr-disp').textContent     = ae.threshold?.toFixed(5)??'—';
+      const mlW = Math.round((ae.ml_weight||0.6)*100);
+      document.getElementById('weight-slider').value = mlW;
+      document.getElementById('weight-val-disp').textContent = mlW+'%';
+      document.getElementById('ml-w-disp').textContent   = mlW+'%';
+      document.getElementById('rule-w-disp').textContent = (100-mlW)+'%';
+      pill.className='model-pill trained'; pillText.textContent='ML + Rules';
+    } else if(ae.training_mode){
+      step1.className='step running';
+      badge.className='model-status-badge badge-collecting';
+      badge.textContent='Collecting…';
+      collectBtn.className='btn-sm btn-green active';
+      collectBtn.textContent='⏹ Stop Collecting';
+      pill.className='model-pill collecting'; pillText.textContent='Collecting data';
+    } else {
+      step1.className='step active';
+      badge.className='model-status-badge badge-untrained';
+      badge.textContent='Not trained';
+      collectBtn.className='btn-sm btn-green';
+      collectBtn.textContent='▶ Start Collecting';
+      pill.className='model-pill'; pillText.textContent='Rules only';
+    }
+  }
+
+  // ── MODEL CONTROLS ─────────────────────────────────────────────────────────
+  function toggleCollect(){
+    fetch('/toggle_training',{method:'POST'}).then(r=>r.json()).then(data=>{
+      // ae_status socket event will update the panel
+    });
+  }
+
+  function clearData(){
+    fetch('/clear_training_data',{method:'POST'}).then(r=>r.json()).then(()=>{
+      document.getElementById('seq-count-label').textContent = '0 / 200';
+      document.getElementById('seq-prog-bar').style.width    = '0%';
+      document.getElementById('btn-train').disabled = true;
+    });
+  }
+
+  function trainModel(){
+    const btn = document.getElementById('btn-train');
+    btn.disabled = true; btn.textContent='⏳ Training…';
+    fetch('/train_model',{method:'POST'}).then(r=>r.json()).then(data=>{
+      if(data.status!=='ok'){
+        btn.disabled=false; btn.textContent='⚙ Train Model';
+        showToast({title:'Error', body:data.message, color:'#ef4444', borderColor:'#fca5a5'});
+      }
+    });
+  }
+
+  function updateWeightDisplay(val){
+    document.getElementById('weight-val-disp').textContent = val+'%';
+    document.getElementById('ml-w-disp').textContent   = val+'%';
+    document.getElementById('rule-w-disp').textContent = (100-parseInt(val))+'%';
+    // Note: updating ML_WEIGHT live would require a new route — omitted for simplicity.
+    // The displayed value reflects the slider; restart app to change the backend weight.
+  }
+
+  // ── SUSPICIOUS PERSONS ─────────────────────────────────────────────────────
+  let personState = {};
+  const trackedGids = new Set();
+
+  function scoreBarColor(score){
+    if(score>=80) return '#ef4444';
+    if(score>=50) return '#f97316';
+    if(score>=25) return '#eab308';
+    return '#94a3b8';
+  }
+
+  const BREAKDOWN_LABELS = {
+    loitering:'Loitering', erratic:'Erratic', zone_hop:'Zone Hop',
+    reentry:'Re-entry', counterflow:'Counterflow', restricted_zone:'Restricted',
+  };
+
+  function buildBreakdownTags(breakdown){
+    return Object.entries(breakdown).map(([key,val])=>{
+      const label = BREAKDOWN_LABELS[key]||key;
+      const detail = key==='loitering'   ? ` ${val}s`
+                   : key==='erratic'     ? ` σ${val}`
+                   : key==='zone_hop'    ? ` ×${val}`
+                   : key==='reentry'     ? ` ×${val}`
+                   : key==='counterflow' ? ` ${val}`
+                   : '';
+      return `<span class="breakdown-tag tag-${key}">${label}${detail}</span>`;
+    }).join('');
+  }
+
+  const personRenderCache = {};
+  function renderPersonList(persons){
+    const listEl  = document.getElementById('person-list');
+    const emptyEl = document.getElementById('person-list-empty');
+    const badge   = document.getElementById('suspicious-badge');
+
+    const visible = persons.filter(p=>p.score>5||p.flagged||p.manually_flagged);
+    visible.sort((a,b)=>(b.flagged-a.flagged)||b.score-a.score);
+    const flaggedCount = persons.filter(p=>p.flagged||p.manually_flagged).length;
+    if (badge && badge.textContent !== String(flaggedCount)) {
+      badge.textContent = flaggedCount;
+    }
+
+    if(visible.length===0){
+      if (emptyEl) emptyEl.style.display='';
+      listEl.innerHTML='';
+      for (const k in personRenderCache) delete personRenderCache[k];
+      return;
+    }
+    if (emptyEl) emptyEl.style.display='none';
+
+    const existingRows={};
+    listEl.querySelectorAll('[data-gid]').forEach(el=>{existingRows[el.dataset.gid]=el;});
+    const renderedGids=new Set();
+
+    visible.forEach(p=>{
+      const gid       = p.global_id;
+      const isManual  = p.manually_flagged;
+      const isFlagged = p.flagged;
+      const isTarget  = trackedGids.has(gid);
+      const mlScore   = p.ml_score||0;
+      const ruleScore = p.rule_score||0;
+      const hasMl     = mlScore>0;
+      renderedGids.add(String(gid));
+
+      let row = existingRows[String(gid)];
+      if(!row){
+        row = document.createElement('div');
+        row.className  = 'person-row';
+        row.dataset.gid = gid;
+        row.innerHTML = `
+          <div class="person-gid">GID <strong>${gid}</strong></div>
+          <div class="person-zone" id="pzone-${gid}">—</div>
+          <div class="person-score-wrap">
+            <div class="person-score-bar-track">
+              <div class="person-score-bar" id="pbar-${gid}" style="width:0%"></div>
+            </div>
+            <div class="score-nums" id="pscores-${gid}"></div>
+            <div class="person-breakdown" id="pbd-${gid}"></div>
+          </div>
+          <div class="person-actions">
+            <button class="btn-track" id="ptrack-${gid}" onclick="trackPerson(${gid})">⊕ Track</button>
+            <button class="btn-flag"  id="pflag-${gid}"  onclick="flagPerson(${gid})">⚑ Flag</button>
+          </div>`;
+      }
+
+      listEl.appendChild(row);
+
+      const newClassName = 'person-row' + (isTarget ? ' target-locked' : isManual ? ' manual-flagged' : isFlagged ? ' flagged' : '');
+      const newZone = p.zone||'—';
+      const newScore = p.score;
+      const newMlScore = mlScore;
+      const newRuleScore = ruleScore;
+      const newHasMl = hasMl;
+      const newBreakdownJson = JSON.stringify(p.score_breakdown||{});
+
+      const cached = personRenderCache[gid];
+      if (!cached ||
+          cached.className !== newClassName ||
+          cached.zone !== newZone ||
+          cached.score !== newScore ||
+          cached.mlScore !== newMlScore ||
+          cached.ruleScore !== newRuleScore ||
+          cached.hasMl !== newHasMl ||
+          cached.breakdownJson !== newBreakdownJson ||
+          cached.isTarget !== isTarget ||
+          cached.isManual !== isManual ||
+          cached.isFlagged !== isFlagged) {
+          
+        row.className = newClassName;
+        
+        const zoneEl = document.getElementById(`pzone-${gid}`);
+        if(zoneEl && (!cached || cached.zone !== newZone)) {
+          zoneEl.textContent = newZone;
+        }
+
+        const barEl = document.getElementById(`pbar-${gid}`);
+        if(barEl && (!cached || cached.score !== newScore)){
+          barEl.style.width = Math.min(100, newScore)+'%';
+          barEl.style.background = scoreBarColor(newScore);
+        }
+
+        const scoresEl = document.getElementById(`pscores-${gid}`);
+        if(scoresEl && (!cached || cached.mlScore !== newMlScore || cached.ruleScore !== newRuleScore || cached.score !== newScore || cached.hasMl !== newHasMl)){
+          scoresEl.innerHTML = newHasMl
+            ? `<span class="score-ml">ML: ${newMlScore}</span><span class="score-rule">Rule: ${newRuleScore}</span><span>Hybrid: ${newScore}</span>`
+            : `<span>Score: ${newScore}</span>`;
+        }
+
+        const bdEl = document.getElementById(`pbd-${gid}`);
+        if(bdEl && (!cached || cached.breakdownJson !== newBreakdownJson)) {
+          bdEl.innerHTML = buildBreakdownTags(p.score_breakdown||{});
+        }
+
+        const trackBtn = document.getElementById(`ptrack-${gid}`);
+        if(trackBtn && (!cached || cached.isTarget !== isTarget)){
+          trackBtn.className = isTarget?'btn-track active':'btn-track';
+          trackBtn.textContent = isTarget?'⊕ Locked':'⊕ Track';
+        }
+
+        const flagBtn = document.getElementById(`pflag-${gid}`);
+        if(flagBtn && (!cached || cached.isManual !== isManual)){
+          flagBtn.className = isManual?'btn-flag active':'btn-flag';
+          flagBtn.textContent = isManual?'⚑ Unflag':'⚑ Flag';
+        }
+
+        personRenderCache[gid] = {
+          className: newClassName,
+          zone: newZone,
+          score: newScore,
+          mlScore: newMlScore,
+          ruleScore: newRuleScore,
+          hasMl: newHasMl,
+          breakdownJson: newBreakdownJson,
+          isTarget: isTarget,
+          isManual: isManual,
+          isFlagged: isFlagged
+        };
+      }
+    });
+
+    Object.entries(existingRows).forEach(([gidStr,el])=>{
+      if(!renderedGids.has(gidStr)) {
+        el.remove();
+        delete personRenderCache[gidStr];
+      }
+    });
+  }
+
+  socket.on('person_data', function(data){ renderPersonList(data.persons||[]); });
+
+  // ── TOAST ALERTS ───────────────────────────────────────────────────────────
+  socket.on('suspicious_alert', function(data){ showSuspiciousToast(data); });
+
+  function showSuspiciousToast(data){
+    const bdHtml = Object.entries(data.breakdown||{}).map(([key])=>{
+      return `<span class="breakdown-tag tag-${key}">${BREAKDOWN_LABELS[key]||key}</span>`;
+    }).join('');
+    const mlLine = (data.ml_score>0)
+      ? `<div class="toast-scores">ML: ${data.ml_score} &nbsp;·&nbsp; Hybrid: ${data.score}</div>`
+      : '';
+    showToast({
+      title:`🚨 [${data.camera_label || 'Camera'}] Suspicious — GID ${data.global_id}`,
+      body:`Score reached <strong>${data.score}</strong>${mlLine}`,
+      tags: bdHtml,
+      color:'#dc2626', borderColor:'#fca5a5'
+    });
+  }
+
+  function showToast({title,body,tags='',color='#dc2626',borderColor='#fca5a5'}){
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.style.borderLeftColor = color;
+    toast.style.borderColor     = borderColor;
+    toast.innerHTML = `
+      <div class="toast-title" style="color:${color}">${title}</div>
+      <div class="toast-body">${body}</div>
+      ${tags?`<div class="toast-tags">${tags}</div>`:''}`;
+    container.appendChild(toast);
+    setTimeout(()=>{ toast.classList.add('hiding'); setTimeout(()=>toast.remove(),260); }, 5000);
+  }
+
+  // ── TRACK / FLAG ───────────────────────────────────────────────────────────
+  function trackPerson(gid){
+    if (trackedGids.has(gid)) {
+      trackedGids.delete(gid);
+    } else {
+      trackedGids.add(gid);
+    }
+    fetch('/track_person',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({global_id:gid})});
+    const trackBtn = document.getElementById(`ptrack-${gid}`);
+    if(trackBtn){
+      const active = trackedGids.has(gid);
+      trackBtn.className = active?'btn-track active':'btn-track';
+      trackBtn.textContent = active?'⊕ Locked':'⊕ Track';
+    }
+    const row = document.querySelector(`.person-row[data-gid="${gid}"]`);
+    if(row){
+      if(trackedGids.has(gid)){
+        row.classList.add('target-locked');
+      } else {
+        row.classList.remove('target-locked');
+      }
+    }
+  }
+
+  function flagPerson(gid){
+    if(!personState[gid]) personState[gid]={manually_flagged:false};
+    const newFlag = !personState[gid].manually_flagged;
+    personState[gid].manually_flagged = newFlag;
+    fetch('/flag_person',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({global_id:gid,flag:newFlag})});
+    const flagBtn = document.getElementById(`pflag-${gid}`);
+    if(flagBtn){ flagBtn.className=newFlag?'btn-flag active':'btn-flag'; flagBtn.textContent=newFlag?'⚑ Unflag':'⚑ Flag'; }
+    const row = document.querySelector(`.person-row[data-gid="${gid}"]`);
+    if(row){ if(newFlag){row.classList.add('manual-flagged');row.classList.remove('flagged');}else{row.classList.remove('manual-flagged');} }
+  }
+
+  function manualFlagSubmit() {
+    const input = document.getElementById('manual-flag-input');
+    const gid = parseInt(input.value);
+    if (isNaN(gid) || gid < 0) {
+      showToast({title:'Error', body:'Please enter a valid GID number', color:'#ef4444', borderColor:'#fca5a5'});
+      return;
+    }
+    
+    if(!personState[gid]) personState[gid]={manually_flagged:false};
+    const newFlag = !personState[gid].manually_flagged;
+    personState[gid].manually_flagged = newFlag;
+    
+    fetch('/flag_person',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({global_id:gid,flag:newFlag})
+    }).then(r=>r.json()).then(data=>{
+      if(data.status==='ok'){
+        showToast({
+          title: newFlag ? '✓ Flagged GID' : '✓ Unflagged GID',
+          body: `Global ID ${gid} has been ${newFlag ? 'manually flagged' : 'unflagged'}.`,
+          color: '#f97316', borderColor: '#fdba74'
+        });
+        input.value = '';
+      }
+    });
+  }
+
+  // ── PERSON SEARCH TAB FUNCTIONALITY ────────────────────────────────────────
+  let selectedFile = null;
+
+  function switchTab(tabId) {
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-nav-btn').forEach(b => b.classList.remove('active'));
+
+    document.getElementById(`${tabId}-tab`).classList.add('active');
+    document.getElementById(`tab-nav-${tabId}`).classList.add('active');
+
+    if (tabId === 'search') {
+      loadSearchHistory();
+    }
+  }
+
+  // Drag and Drop dragover handler
+  const dropzone = document.getElementById('upload-dropzone');
+  if (dropzone) {
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.style.borderColor = '#3b82f6';
+      dropzone.style.background = '#eff6ff';
+    });
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.style.borderColor = '#cbd5e1';
+      dropzone.style.background = '#f8fafc';
+    });
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.style.borderColor = '#cbd5e1';
+      dropzone.style.background = '#f8fafc';
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        document.getElementById('query-file-input').files = e.dataTransfer.files;
+        handleFileSelect({ target: { files: e.dataTransfer.files } });
+      }
+    });
+  }
+
+  function handleFileSelect(event) {
+    const files = event.target.files;
+    if (files && files.length > 0) {
+      selectedFile = files[0];
+      document.getElementById('btn-run-search').disabled = false;
+      
+      // Update upload text to filename
+      document.querySelector('.upload-zone-text').textContent = selectedFile.name;
+      document.querySelector('.upload-zone-sub').textContent = `${(selectedFile.size / 1024).toFixed(1)} KB`;
+      
+      // Show query image preview immediately
+      const originalPreview = document.getElementById('img-preview-original');
+      if (originalPreview.src && originalPreview.src.startsWith('blob:')) {
+        URL.revokeObjectURL(originalPreview.src);
+      }
+      originalPreview.src = URL.createObjectURL(selectedFile);
+      document.getElementById('query-previews-section').style.display = 'flex';
+      
+      // Clear previous crop preview and results
+      document.getElementById('img-preview-crop').src = '';
+      document.getElementById('search-results-container').style.display = 'none';
+      document.getElementById('search-results-empty').style.display = 'block';
+      document.getElementById('timeline-section').style.display = 'none';
+    }
+  }
+
+  function runPersonSearch() {
+    if (!selectedFile) return;
+
+    const btn = document.getElementById('btn-run-search');
+    btn.disabled = true;
+    btn.textContent = '⚡ Searching...';
+
+    const thresholdVal = document.getElementById('search-threshold').value;
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('threshold', thresholdVal);
+
+    fetch('/upload_query_image', {
+      method: 'POST',
+      body: formData
+    })
+    .then(res => res.json())
+    .then(data => {
+      btn.disabled = false;
+      btn.textContent = '⚡ Search Database';
+
+      if (data.status === 'success') {
+        showToast({
+          title: '✓ Search Complete',
+          body: `Found ${data.matches.length} matching profile(s) in database.`,
+          color: '#22c55e', borderColor: '#86efac'
+        });
+
+        // Set yolo crop preview
+        document.getElementById('img-preview-crop').src = '/' + data.cropped_image;
+
+        // Render results
+        renderSearchResults(data.matches);
+        loadSearchHistory();
+      } else {
+        showToast({
+          title: '✕ Search Failed',
+          body: data.message || 'Error occurred during processing',
+          color: '#ef4444', borderColor: '#fca5a5'
+        });
+      }
+    })
+    .catch(err => {
+      btn.disabled = false;
+      btn.textContent = '⚡ Search Database';
+      console.error(err);
+      showToast({
+        title: '✕ Search Error',
+        body: 'Server connection error',
+        color: '#ef4444', borderColor: '#fca5a5'
+      });
+    });
+  }
+
+  function renderSearchResults(matches) {
+    const container = document.getElementById('search-results-container');
+    const emptyMsg = document.getElementById('search-results-empty');
+
+    if (!matches || matches.length === 0) {
+      container.style.display = 'none';
+      emptyMsg.style.display = 'block';
+      emptyMsg.textContent = 'No matching person profiles found above the similarity threshold.';
+      return;
+    }
+
+    emptyMsg.style.display = 'none';
+    container.style.display = 'flex';
+    container.innerHTML = '';
+
+    matches.forEach((m, idx) => {
+      const bestImg = m.best_image_path ? '/' + m.best_image_path : 'https://placehold.co/90x120/1e293b/ffffff?text=No+Snapshot';
+      
+      let faceBadge = '';
+      if (m.face_match_status === 'matched') {
+        faceBadge = `<span class="badge badge-success" style="background:#22c55e; color:white; padding:2px 6px; border-radius:4px; font-size:11px; margin-left:8px; font-weight:bold; display:inline-flex; align-items:center;">✓ Face Verified (${Math.round(m.face_similarity * 100)}%)</span>`;
+      } else if (m.face_match_status === 'mismatched') {
+        faceBadge = `<span class="badge badge-danger" style="background:#ef4444; color:white; padding:2px 6px; border-radius:4px; font-size:11px; margin-left:8px; font-weight:bold; display:inline-flex; align-items:center;">✕ Face Mismatch (${Math.round(m.face_similarity * 100)}%)</span>`;
+      } else if (m.face_match_status === 'uncertain') {
+        faceBadge = `<span class="badge badge-warning" style="background:#eab308; color:black; padding:2px 6px; border-radius:4px; font-size:11px; margin-left:8px; font-weight:bold; display:inline-flex; align-items:center;">⚠ Face Inconclusive (${Math.round(m.face_similarity * 100)}%)</span>`;
+      } else {
+        faceBadge = `<span class="badge badge-secondary" style="background:#64748b; color:white; padding:2px 6px; border-radius:4px; font-size:11px; margin-left:8px; font-weight:bold; display:inline-flex; align-items:center;">Body Re-ID Only</span>`;
+      }
+
+      const card = document.createElement('div');
+      card.className = 'match-card';
+      card.innerHTML = `
+        <div class="match-crop-container">
+          <img class="match-crop" src="${bestImg}" alt="GID ${m.person_id}"/>
+        </div>
+        <div class="match-info">
+          <div class="match-rank-row" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span class="match-rank">Rank ${idx + 1}</span>
+            <span class="match-gid">Person GID ${m.person_id}</span>
+            <span class="match-similarity">Similarity: ${m.confidence_percentage}%</span>
+            ${faceBadge}
+          </div>
+          <div class="match-meta-grid">
+            <div class="match-meta-item">First Seen: <span>${m.first_seen}</span></div>
+            <div class="match-meta-item">Last Seen: <span>${m.last_seen}</span></div>
+            <div class="match-meta-item">Dwell Time: <span>${m.total_dwell_seconds}s</span></div>
+            <div class="match-meta-item">Sightings Count: <span>${m.total_sightings}</span></div>
+          </div>
+          <div class="match-meta-item" style="margin-top:4px;">Cameras: <span>${m.camera_history.join(', ') || 'None'}</span></div>
+        </div>
+        <div class="match-actions">
+          <button class="btn-timeline" id="btn-timeline-${m.person_id}" onclick="loadPersonTimeline(${m.person_id})">
+            📅 Timeline
+          </button>
+          <button class="btn-flag ${personState[m.person_id]?.manually_flagged ? 'active' : ''}" id="pflag-search-${m.person_id}" onclick="flagPersonFromSearch(${m.person_id})">
+            ${personState[m.person_id]?.manually_flagged ? '⚑ Unflag' : '⚑ Flag'}
+          </button>
+        </div>
+      `;
+      container.appendChild(card);
+    });
+  }
+
+  function flagPersonFromSearch(gid) {
+    flagPerson(gid);
+    // Update the button state on the search result card
+    setTimeout(() => {
+      const btn = document.getElementById(`pflag-search-${gid}`);
+      if (btn) {
+        const flagged = personState[gid]?.manually_flagged;
+        btn.className = flagged ? 'btn-flag active' : 'btn-flag';
+        btn.textContent = flagged ? '⚑ Unflag' : '⚑ Flag';
+      }
+    }, 100);
+  }
+
+  function loadPersonTimeline(gid) {
+    // Highlight timeline button
+    document.querySelectorAll('.btn-timeline').forEach(b => b.classList.remove('active'));
+    const btn = document.getElementById(`btn-timeline-${gid}`);
+    if (btn) btn.classList.add('active');
+
+    fetch(`/person/${gid}/timeline`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'success') {
+        const container = document.getElementById('timeline-nodes-container');
+        document.getElementById('timeline-gid-label').textContent = gid;
+        document.getElementById('timeline-section').style.display = 'block';
+        container.innerHTML = '';
+
+        if (!data.timeline || data.timeline.length === 0) {
+          container.innerHTML = '<div style="font-size:11px;color:#94a3b8;text-align:center;padding:12px 0;">No chronological sightings logged.</div>';
+          return;
+        }
+
+        data.timeline.forEach(t => {
+          const snap = t.snapshot_path ? '/' + t.snapshot_path : 'https://placehold.co/60x80/1e293b/ffffff?text=N/A';
+          const node = document.createElement('div');
+          node.className = 'timeline-node';
+          node.innerHTML = `
+            <div class="timeline-dot"></div>
+            <div class="timeline-content">
+              <div class="timeline-content-left">
+                <div class="timeline-time">${t.timestamp}</div>
+                <div class="timeline-cam-zone">${t.camera_label} &bull; ${t.zone}</div>
+                <div class="timeline-meta">Sighting confidence: ${(t.confidence * 100).toFixed(0)}%</div>
+              </div>
+              <div class="timeline-crop-box">
+                <img class="timeline-crop" src="${snap}" alt="Sighting Snapshot"/>
+              </div>
+            </div>
+          `;
+          container.appendChild(node);
+        });
+
+        // Smooth scroll to timeline
+        document.getElementById('timeline-section').scrollIntoView({ behavior: 'smooth' });
+      }
+    });
+  }
+
+  function loadSearchHistory() {
+    fetch('/search/history')
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'success') {
+        const list = document.getElementById('search-history-list');
+        list.innerHTML = '';
+
+        if (!data.history || data.history.length === 0) {
+          list.innerHTML = '<div style="text-align: center; color: #94a3b8; font-size: 11px; padding: 12px 0;">No recent searches</div>';
+          return;
+        }
+
+        data.history.forEach(h => {
+          const item = document.createElement('div');
+          item.className = 'history-item';
+          item.onclick = () => {
+            // Populate original preview with history query image
+            const originalPreview = document.getElementById('img-preview-original');
+            if (originalPreview.src && originalPreview.src.startsWith('blob:')) {
+              URL.revokeObjectURL(originalPreview.src);
+            }
+            originalPreview.src = '/' + h.query_image;
+            
+            // Populate crop preview
+            const cropPreview = document.getElementById('img-preview-crop');
+            cropPreview.src = '/' + h.cropped_image;
+            
+            document.getElementById('query-previews-section').style.display = 'flex';
+            
+            // Run search for this query's top GID if exists
+            if (h.top_match_id) {
+              loadPersonTimeline(h.top_match_id);
+            }
+            
+            // Notify user
+            showToast({
+              title: '🕰 Loaded query history',
+              body: `Showing query from ${h.timestamp}`,
+              color: '#3b82f6', borderColor: '#93c5fd'
+            });
+          };
+          
+          item.innerHTML = `
+            <img class="history-thumb" src="/${h.cropped_image}" alt="Thumb"/>
+            <div class="history-details">
+              <div class="history-time">${h.timestamp}</div>
+              <div class="history-summary">${h.matches_found} matches (Top: ${h.top_match_similarity ? (h.top_match_similarity * 100).toFixed(0) + '%' : 'None'})</div>
+            </div>
+          `;
+          list.appendChild(item);
+        });
+      }
+    });
+  }
+
+  function resetDatabase() {
+    if (!confirm("Are you sure you want to completely clear all database dynamic tracking data? This will restart the surveillance dashboard from a clean slate.")) {
+      return;
+    }
+    fetch('/api/reset_database', { method: 'POST' })
+    .then(res => res.json())
+    .then(data => {
+      if (data.status === 'ok') {
+        alert("Database and memory gallery reset successfully. Starting fresh!");
+        window.location.reload();
+      } else {
+        alert("Error resetting database: " + data.message);
+      }
+    });
+  }
+
+  // ── INITIAL STATUS FETCH ───────────────────────────────────────────────────
 </script>
 
 </body>
