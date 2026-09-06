@@ -169,10 +169,18 @@ def detect_face(img):
                 # Pick the face with the highest confidence score (at index 14)
                 best_face = max(faces, key=lambda f: f[14])
                 
+                # Check for non-finite values to avoid float-to-int conversion exceptions
+                if not np.isfinite(best_face).all():
+                    return None
+                
                 # Enforce size and confidence filters to prevent noisy/distant matches
-                f_w = int(best_face[2])
-                f_h = int(best_face[3])
-                f_conf = float(best_face[14])
+                try:
+                    f_w = int(best_face[2])
+                    f_h = int(best_face[3])
+                    f_conf = float(best_face[14])
+                except (ValueError, OverflowError):
+                    return None
+                    
                 if f_w >= 14 and f_h >= 14 and f_conf >= 0.75:
                     return best_face
                 return None

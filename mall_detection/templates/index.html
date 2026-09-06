@@ -293,6 +293,7 @@
     .person-row.flagged        { border-color:#fca5a5; background:#fff5f5; }
     .person-row.manual-flagged { border-color:#fdba74; background:#fff7ed; }
     .person-row.target-locked  { border-color:#ef4444; background:#fef2f2; box-shadow:0 0 0 2px rgba(239,68,68,.15); }
+    .person-row.not-present    { border-color:#cbd5e1; background:#f1f5f9; opacity:0.6; }
     .person-gid  { font-size:12px; font-weight:700; color:#1e293b; min-width:58px; flex-shrink:0; }
     .person-zone { font-size:10px; color:#64748b; min-width:46px; flex-shrink:0; }
     .person-score-wrap { flex:1; min-width:0; }
@@ -1482,7 +1483,7 @@
 
       listEl.appendChild(row);
 
-      const newClassName = 'person-row' + (isTarget ? ' target-locked' : isManual ? ' manual-flagged' : isFlagged ? ' flagged' : '');
+      const newClassName = 'person-row' + (isTarget ? ' target-locked' : isManual ? ' manual-flagged' : isFlagged ? ' flagged' : '') + (p.present === false ? ' not-present' : '');
       const newZone = p.zone||'—';
       const newScore = p.score;
       const newMlScore = mlScore;

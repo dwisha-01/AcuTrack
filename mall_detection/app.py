@@ -80,7 +80,7 @@ app = Flask(__name__)
 def shutdown_session_holder(exception=None):
     shutdown_session(exception)
 
-socketio = SocketIO(app, cors_allowed_origins="*")
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading', ping_timeout=60, ping_interval=25)
 
 # ── YOLO ───────────────────────────────────────────────────────────────────────
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -115,17 +115,31 @@ STATE_TTL_SECONDS = 30 * 86400  # 30 days to keep profiles in memory for matchin
 MAX_GALLERY_IDENTITIES = 1000
 FRAME_STEP        = 2  # Process every Nth frame of video file (constant step size) to reduce lag and preserve tracking continuity
 
+# Set this to True to run the 3-laptop live demo with webcams,
+# or False to run the Wildtrack dataset.
+LIVE_DEMO_MODE = True
+
 # ── VIDEO SOURCES ─────────────────────────────────────────────────────────────
-VIDEO_SOURCES = {
-    "cam1": {"file": "Wildtrack/cam1.mp4", "label": "Camera 1", "desc": "Wildtrack Cam 1 — Courtyard view 1"},
-    "cam2": {"file": "Wildtrack/cam2.mp4", "label": "Camera 2", "desc": "Wildtrack Cam 2 — Courtyard view 2"},
-    "cam3": {"file": "Wildtrack/cam3.mp4", "label": "Camera 3", "desc": "Wildtrack Cam 3 — Courtyard view 3"},
-    "cam4": {"file": "Wildtrack/cam4.mp4", "label": "Camera 4", "desc": "Wildtrack Cam 4 — Courtyard view 4"},
-    "cam5": {"file": "Wildtrack/cam5.mp4", "label": "Camera 5", "desc": "Wildtrack Cam 5 — Courtyard view 5"},
-    "cam6": {"file": "Wildtrack/cam6.mp4", "label": "Camera 6", "desc": "Wildtrack Cam 6 — Courtyard view 6"},
-    "cam7": {"file": "Wildtrack/cam7.mp4", "label": "Camera 7", "desc": "Wildtrack Cam 7 — Courtyard view 7"},
-    "live": {"file": 0,                    "label": "Live Camera", "desc": "Live webcam feed"},
-}
+if LIVE_DEMO_MODE:
+    VIDEO_SOURCES = {
+        "cam1": {"file": 0, "label": "Camera 1 (Local)", "desc": "Local Laptop Webcam Feed"},
+        "cam2": {"file": "upload", "label": "Camera 2 (Remote)", "desc": "Webcam Feed uploaded from Laptop 2"},
+        "cam3": {"file": "upload", "label": "Camera 3 (Remote)", "desc": "Webcam Feed uploaded from Laptop 3"},
+    }
+else:
+    VIDEO_SOURCES = {
+        "cam1": {"file": "Wildtrack/cam1.mp4", "label": "Camera 1", "desc": "Wildtrack Cam 1 — Courtyard view 1"},
+        "cam2": {"file": "Wildtrack/cam2.mp4", "label": "Camera 2", "desc": "Wildtrack Cam 2 — Courtyard view 2"},
+        "cam3": {"file": "Wildtrack/cam3.mp4", "label": "Camera 3", "desc": "Wildtrack Cam 3 — Courtyard view 3"},
+        "cam4": {"file": "Wildtrack/cam4.mp4", "label": "Camera 4", "desc": "Wildtrack Cam 4 — Courtyard view 4"},
+        "cam5": {"file": "Wildtrack/cam5.mp4", "label": "Camera 5", "desc": "Wildtrack Cam 5 — Courtyard view 5"},
+        "cam6": {"file": "Wildtrack/cam6.mp4", "label": "Camera 6", "desc": "Wildtrack Cam 6 — Courtyard view 6"},
+        "cam7": {"file": "Wildtrack/cam7.mp4", "label": "Camera 7", "desc": "Wildtrack Cam 7 — Courtyard view 7"},
+        "live": {"file": 0,                    "label": "Live Camera", "desc": "Live webcam feed"},
+    }
+
+# Thread-safe queues to receive webcam frames uploaded from Laptop 2 & Laptop 3
+upload_frame_queues = {k: queue.Queue(maxsize=2) for k in VIDEO_SOURCES}
 
 # FIX: stable per-camera index used to namespace fallback IDs (see below) so
 # they can never collide across cameras.
@@ -163,8 +177,8 @@ def get_tracker(camera_key):
                 reid_weights=Path("osnet_x0_25_msmt17.pt"),
                 device=device,
                 half=(device.type == "cuda"),
-                max_age=30,
-                max_cos_dist=0.45,
+                max_age=90,
+                max_cos_dist=0.55,
             )
             tracker.cmc = DummyCMC()
             trackers[camera_key] = tracker
@@ -262,7 +276,10 @@ def db_worker():
                                 elif box_area is not None and box_area > 8000 and confidence >= 0.6:
                                     db_person.best_image_path = snapshot_web_path
 
-                            existing_embs = db_session.query(PersonEmbedding).filter(PersonEmbedding.person_id == gid).all()
+                            existing_embs = db_session.query(PersonEmbedding).filter(
+                                PersonEmbedding.person_id == gid,
+                                PersonEmbedding.camera_key != "face"
+                            ).all()
                             if len(existing_embs) < GALLERY_TEMPLATES_PER_ID:
                                 embedding = np.frombuffer(data["embedding_bytes"], dtype=np.float32)
                                 distinct = True
@@ -316,6 +333,38 @@ def db_worker():
                                 snapshot_path=snapshot_web_path
                             )
                             db_session.add(new_sighting)
+                            
+                        db_session.commit()
+                        
+                    elif task_type == "merge_persons":
+                        old_gid = data["old_gid"]
+                        new_gid = data["new_gid"]
+                        
+                        # 1. Update sightings
+                        db_session.query(Sighting).filter(Sighting.person_id == old_gid).update({Sighting.person_id: new_gid})
+                        
+                        # 2. Update dwell times
+                        db_session.query(DwellTime).filter(DwellTime.person_id == old_gid).update({DwellTime.person_id: new_gid})
+                        
+                        # 3. Update alerts
+                        db_session.query(Alert).filter(Alert.person_id == old_gid).update({Alert.person_id: new_gid})
+                        
+                        # 4. Update embeddings
+                        db_session.query(PersonEmbedding).filter(PersonEmbedding.person_id == old_gid).update({PersonEmbedding.person_id: new_gid})
+                        
+                        # 5. Merge TrackedPerson statistics
+                        old_person = db_session.query(TrackedPerson).filter(TrackedPerson.person_id == old_gid).first()
+                        new_person = db_session.query(TrackedPerson).filter(TrackedPerson.person_id == new_gid).first()
+                        if old_person and new_person:
+                            new_person.visit_count += old_person.visit_count
+                            new_person.total_dwell += old_person.total_dwell
+                            if old_person.first_seen < new_person.first_seen:
+                                new_person.first_seen = old_person.first_seen
+                            if old_person.last_seen > new_person.last_seen:
+                                new_person.last_seen = old_person.last_seen
+                            db_session.delete(old_person)
+                        elif old_person:
+                            old_person.person_id = new_gid
                             
                         db_session.commit()
                         
@@ -410,6 +459,8 @@ global_face_gallery = {}
 local_to_global = {}
 global_last_seen = {}
 next_global_id  = 1
+face_aligned_tracks = set()
+track_last_face_check = {}
 # FIX: yolo_lock REMOVED — each camera now has its own YOLO model instance,
 # so no shared resource contention. Cameras run YOLO truly in parallel.
 
@@ -429,16 +480,26 @@ camera_threads_lock    = threading.Lock()
 # id. We now keep up to GALLERY_TEMPLATES_PER_ID separate embeddings per
 # person and match against the BEST (min-distance) template, not an average.
 GALLERY_TEMPLATES_PER_ID = 15
-# FIX: threshold loosened 0.28 → 0.35. This was kept tight before because it
-# was the only thing stopping two different people from merging onto the same
-# global id. That job is now handled explicitly by the per-frame per-camera
-# exclusion set below, so the threshold is free to be more permissive for
-# cross-angle recall without reintroducing false merges.
-REID_MATCH_THRESHOLD = 0.60  # tuned to 0.60 to permit matching across different camera viewpoints
-REID_RECENT_WINDOW_SECONDS = 30 * 86400.0  # 30 days to allow matching returning visitors to database profiles
-# Disabled ambiguity margin (set to 0.0) to prevent similar clothing embeddings
-# from blocking the closest candidate match.
-REID_AMBIGUITY_MARGIN = 0.0
+
+# REID matching thresholds and ambiguity margins (Phase 2 & 3)
+# In live demo mode with multiple consumer webcams, lighting, auto-exposure, and sensors vary.
+# We adapt thresholds dynamically for live webcam demo vs benchmark dataset.
+if LIVE_DEMO_MODE:
+    REID_MATCH_THRESHOLD = 0.58       # 0.58 allows cross-camera matching across different laptop webcams
+    REID_RECENT_WINDOW_SECONDS = 30 * 86400.0
+    REID_AMBIGUITY_MARGIN = 0.04      # lower ambiguity margin prevents splitting same person into new IDs
+    GALLERY_MIN_CONFIDENCE = 0.50     # 0.50 ensures live webcam crops are admitted to gallery
+    GALLERY_MIN_BOX_AREA = 1000       # 1000 px allows people 2-3 meters away to register in gallery
+    GALLERY_MIN_DIST = 0.05           # accepts varied poses
+    GALLERY_MAX_DIST = 0.68           # allows cross-angle templates
+else:
+    REID_MATCH_THRESHOLD = 0.48
+    REID_RECENT_WINDOW_SECONDS = 30 * 86400.0
+    REID_AMBIGUITY_MARGIN = 0.08
+    GALLERY_MIN_CONFIDENCE = 0.70
+    GALLERY_MIN_BOX_AREA = 4000
+    GALLERY_MIN_DIST = 0.08
+    GALLERY_MAX_DIST = 0.60
 
 # ── RULE-BASED BEHAVIOR PARAMS (tuned for retail) ─────────────────────────────
 RESTRICTED_ZONES = set()
@@ -615,10 +676,14 @@ def evaluate_live_frame(tracks, frame_idx, camera_key):
 
 
 def point_in_zone(px, py, zone_name):
-    orig_px = px * (1060.0 / FRAME_W)
-    orig_py = py * (660.0 / FRAME_H)
+    # NOTE: previously hardcoded to (1060.0 / FRAME_W) and (660.0 / FRAME_H).
+    # Since ZONES coordinates are authored directly against FRAME_W/FRAME_H,
+    # this scaling is always exactly 1.0 as long as those two constants stay
+    # in sync — which they always will now, since we removed the duplicate
+    # hardcoded numbers. If FRAME_W/FRAME_H ever change, zone detection still
+    # lines up correctly instead of silently drifting.
     x1, y1, x2, y2 = ZONES[zone_name]["coords"]
-    return x1 < orig_px < x2 and y1 < orig_py < y2
+    return x1 < px < x2 and y1 < py < y2
 
 
 def _cos_dist(a, b):
@@ -626,22 +691,23 @@ def _cos_dist(a, b):
 
 
 def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRESHOLD,
-                       exclude_gids=None, box_area=None, frame=None, bbox=None, confidence=1.0, current_zone=None):
+                       exclude_gids=None, box_area=None, frame=None, bbox=None, confidence=1.0, current_zone=None,
+                       run_face_detection=True, ghost_claims=None):
     """
     Match local track to a global ID via OSNet embedding gallery.
     Then, queue the database sync task to offload all I/O from the real-time loop.
     """
-    global next_global_id
+    global next_global_id, face_aligned_tracks, track_last_face_check
+    if ghost_claims is None:
+        ghost_claims = {}
     key = (camera_id, local_id)
     seen_at = time.monotonic()
     
-    # Adaptive threshold for small (far-away) crops
+    # Adaptive threshold for small (far-away) crops starting from central configured threshold
     actual_threshold = threshold
-    if camera_id == "live":
-        actual_threshold = 0.75  # permissive threshold for webcam to hold ID across extreme angles
-    elif box_area is not None and box_area < 6000:
+    if box_area is not None and box_area < 6000:
         fraction = max(0.0, min(1.0, (6000.0 - box_area) / 6000.0))
-        actual_threshold = threshold + fraction * 0.08  # up to 0.63 for small boxes
+        actual_threshold = threshold + fraction * 0.08  # scale threshold up slightly for smaller, noisier crops
         
     # Quality filter: completely bypass gallery matching for extremely small boxes
     if box_area is not None and box_area < 100:
@@ -650,59 +716,165 @@ def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRES
     allow_new = (box_area is None or box_area >= 1200)
     fallback_id = -(CAMERA_INDEX[camera_id] * 100000 + local_id + 1)
     
-    # Try to match face if visible, target is not resolved, and box area is large (close-up target)
+    # Try to match face if visible
     face_gid = None
-    has_positive_id = (key in local_to_global and local_to_global[key] > 0)
-    if not has_positive_id and (camera_id == "live" or (box_area is not None and box_area >= 15000)) and frame is not None and bbox is not None:
-        try:
-            x1, y1, x2, y2 = bbox
-            h_img, w_img, _ = frame.shape
-            x1, y1 = max(0, int(x1)), max(0, int(y1))
-            x2, y2 = min(w_img, int(x2)), min(h_img, int(y2))
-            if x2 > x1 and y2 > y1:
-                crop = frame[y1:y2, x1:x2]
-                with reid_lock:
-                    q_face = detect_face(crop)
-                    if q_face is not None:
-                        q_face_emb = extract_face_embedding(crop, q_face)
-                    else:
-                        q_face_emb = None
-                
-                if q_face_emb is not None:
-                    best_face_gid = None
-                    best_face_sim = 0.0
-                    with gallery_lock:
-                        for g_id, f_embs in global_face_gallery.items():
-                            for f_emb in f_embs:
-                                sim = compute_face_similarity(q_face_emb, f_emb)
-                                if sim > best_face_sim:
-                                    best_face_sim = sim
-                                    best_face_gid = g_id
-                    if best_face_sim >= 0.45:
-                        face_gid = best_face_gid
-                        print(f"  [FACE MATCH] {camera_id} local {local_id} -> GID {face_gid} (sim: {best_face_sim:.3f})")
-        except Exception as e_face:
-            print(f"[LIVE FACE MATCH EXCEPTION] {e_face}")
+    if run_face_detection and key not in face_aligned_tracks:
+        now_mono = time.monotonic()
+        if now_mono - track_last_face_check.get(key, 0.0) >= 1.0:
+            track_last_face_check[key] = now_mono
+            if (LIVE_DEMO_MODE or camera_id == "live" or (box_area is not None and box_area >= 4000)) and frame is not None and bbox is not None:
+                try:
+                    x1, y1, x2, y2 = bbox
+                    h_img, w_img, _ = frame.shape
+                    x1, y1 = max(0, int(x1)), max(0, int(y1))
+                    x2, y2 = min(w_img, int(x2)), min(h_img, int(y2))
+                    if x2 > x1 and y2 > y1:
+                        crop = frame[y1:y2, x1:x2]
+                        with reid_lock:
+                            q_face = detect_face(crop)
+                            if q_face is not None:
+                                q_face_emb = extract_face_embedding(crop, q_face)
+                            else:
+                                q_face_emb = None
+                        
+                        if q_face_emb is not None:
+                            best_face_gid = None
+                            best_face_sim = 0.0
+                            with gallery_lock:
+                                for g_id, f_embs in global_face_gallery.items():
+                                    for f_emb in f_embs:
+                                        sim = compute_face_similarity(q_face_emb, f_emb)
+                                        if sim > best_face_sim:
+                                            best_face_sim = sim
+                                            best_face_gid = g_id
+                                            
+                            # Mark that face extraction has been completed successfully for this track
+                            face_aligned_tracks.add(key)
+                            
+                            if best_face_sim >= 0.45:
+                                face_gid = best_face_gid
+                                print(f"  [FACE MATCH] {camera_id} local {local_id} -> GID {face_gid} (sim: {best_face_sim:.3f})")
+                except Exception as e_face:
+                    print(f"[LIVE FACE MATCH EXCEPTION] {e_face}")
 
     with gallery_lock:
         if face_gid is not None:
-            local_to_global[key] = face_gid
+            old_gid = local_to_global.get(key)
+            if old_gid is not None and old_gid > 0 and old_gid != face_gid:
+                print(f"  [FACE ID CORRECTION] Correcting {camera_id} local {local_id} from GID {old_gid} to GID {face_gid}")
+                
+                # 1. Update in-memory local_to_global mappings for all keys mapped to old_gid
+                for k, v in list(local_to_global.items()):
+                    if v == old_gid:
+                        local_to_global[k] = face_gid
+                        
+                # 2. Merge in-memory history states for the current camera
+                state = camera_states.get(camera_id)
+                if state:
+                    beh_lock = state["behavior_lock"]
+                    with beh_lock:
+                        old_h = state["person_history"].get(old_gid)
+                        new_h = state["person_history"].setdefault(face_gid, _empty_history())
+                        if old_h:
+                            new_h["positions"].extend(old_h["positions"])
+                            new_h["feat_buffer"].extend(old_h["feat_buffer"])
+                            new_h["zones_visited"].update(old_h["zones_visited"])
+                            for z, count in old_h["zone_entry_count"].items():
+                                new_h["zone_entry_count"][z] = new_h["zone_entry_count"].get(z, 0) + count
+                            if old_h["flagged"]: new_h["flagged"] = True
+                            if old_h["manually_flagged"]: new_h["manually_flagged"] = True
+                            new_h["prev_foot"] = old_h["prev_foot"] or new_h["prev_foot"]
+                            new_h["last_seen"] = max(old_h.get("last_seen", 0.0), new_h.get("last_seen", 0.0))
+                            state["person_history"].pop(old_gid, None)
+                            
+                        # Merge dwell entry times
+                        old_dwell = state["dwell_entry_times"].get(old_gid)
+                        if old_dwell:
+                            new_dwell = state["dwell_entry_times"].setdefault(face_gid, {})
+                            for zone, t in old_dwell.items():
+                                new_dwell.setdefault(zone, t)
+                            state["dwell_entry_times"].pop(old_gid, None)
+                            
+                # 3. Merge galleries
+                if old_gid in global_gallery:
+                    new_cam_templates = global_gallery.setdefault(face_gid, {})
+                    for cam_id, templates in global_gallery[old_gid].items():
+                        dest = new_cam_templates.setdefault(cam_id, deque(maxlen=GALLERY_TEMPLATES_PER_ID))
+                        dest.extend(templates)
+                    global_gallery.pop(old_gid, None)
+                    
+                if old_gid in global_face_gallery:
+                    new_face_embs = global_face_gallery.setdefault(face_gid, [])
+                    new_face_embs.extend(global_face_gallery[old_gid])
+                    global_face_gallery.pop(old_gid, None)
+                    
+                if old_gid in global_last_seen:
+                    global_last_seen[face_gid] = max(global_last_seen.get(face_gid, 0.0), global_last_seen.get(old_gid, 0.0))
+                    global_last_seen.pop(old_gid, None)
+                    
+                # 4. Queue the DB merge task
+                db_queue.put(("merge_persons", {
+                    "old_gid": old_gid,
+                    "new_gid": face_gid
+                }))
+                
+                # Structured Logging for FACE_MATCH correction (Phase 11)
+                gallery_size = sum(len(v) for v in global_gallery[face_gid].values()) if face_gid in global_gallery else 0
+                timestamp_str = datetime.now().strftime("%H:%M:%S")
+                print(f"[{timestamp_str}]")
+                print(f"Camera: {camera_id}")
+                print(f"Local ID: {local_id}")
+                print(f"Area: {box_area}")
+                print(f"Conf: {confidence:.2f}")
+                print(f"Best GID: {face_gid}")
+                print(f"Best Distance: 0.00")
+                print(f"Best Similarity: {best_face_sim:.2f}")
+                print(f"Second GID: N/A")
+                print(f"Second Distance: N/A")
+                print(f"Margin: N/A")
+                print(f"Gallery Size: {gallery_size}")
+                print(f"Decision: FACE_MATCH (CORRECTION from GID {old_gid})")
+            else:
+                local_to_global[key] = face_gid
+                
+                # Structured Logging for FACE_MATCH (Phase 11)
+                gallery_size = sum(len(v) for v in global_gallery[face_gid].values()) if face_gid in global_gallery else 0
+                timestamp_str = datetime.now().strftime("%H:%M:%S")
+                print(f"[{timestamp_str}]")
+                print(f"Camera: {camera_id}")
+                print(f"Local ID: {local_id}")
+                print(f"Area: {box_area}")
+                print(f"Conf: {confidence:.2f}")
+                print(f"Best GID: {face_gid}")
+                print(f"Best Distance: 0.00")
+                print(f"Best Similarity: {best_face_sim:.2f}")
+                print(f"Second GID: N/A")
+                print(f"Second Distance: N/A")
+                print(f"Margin: N/A")
+                print(f"Gallery Size: {gallery_size}")
+                print(f"Decision: FACE_MATCH")
 
         # Check if already resolved to a positive global ID
         if key in local_to_global and local_to_global[key] > 0:
             gid = local_to_global[key]
-            cam_templates = global_gallery.setdefault(gid, {})
-            templates = cam_templates.setdefault(camera_id, deque(maxlen=GALLERY_TEMPLATES_PER_ID))
-            
-            # Distinctiveness guard: only append if embedding is sufficiently new/different
-            if len(templates) == 0:
-                templates.append(embedding)
-            else:
-                min_dist = min(_cos_dist(embedding, t) for t in templates)
-                if min_dist > 0.08:
-                    templates.append(embedding)
-            
             global_last_seen[gid] = seen_at
+            
+            # Phase 5/6: Prevent gallery contamination by validating crop quality before inserting
+            is_quality_ok = (confidence >= GALLERY_MIN_CONFIDENCE) and (box_area is not None and box_area >= GALLERY_MIN_BOX_AREA)
+            if is_quality_ok:
+                cam_templates = global_gallery.setdefault(gid, {})
+                templates = cam_templates.setdefault(camera_id, deque(maxlen=GALLERY_TEMPLATES_PER_ID))
+                
+                if len(templates) == 0:
+                    templates.append(embedding)
+                    timestamp_str = datetime.now().strftime("%H:%M:%S")
+                    print(f"[{timestamp_str}] [GALLERY UPDATE] Appended initial template to GID {gid} on camera {camera_id}")
+                else:
+                    min_dist = min(_cos_dist(embedding, t) for t in templates)
+                    if GALLERY_MIN_DIST < min_dist < GALLERY_MAX_DIST:
+                        templates.append(embedding)
+                        timestamp_str = datetime.now().strftime("%H:%M:%S")
+                        print(f"[{timestamp_str}] [GALLERY UPDATE] Appended new template to GID {gid} on camera {camera_id} (min_dist: {min_dist:.3f})")
         else:
             # Not yet matched or mapped to negative fallback. Try to match it against gallery.
             candidates = []
@@ -725,47 +897,158 @@ def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRES
                 
             candidates.sort(key=lambda c: c[0])
 
-            best_id = None
+            best_gid = None
             best_dist = 1.0
-            if candidates:
-                best_dist, cand_gid = candidates[0]
-                ambiguous = (
-                    len(candidates) > 1
-                    and (candidates[1][0] - best_dist) < REID_AMBIGUITY_MARGIN
-                    and candidates[1][0] < actual_threshold
-                )
-                if best_dist < actual_threshold and not ambiguous:
-                    best_id = cand_gid
+            best_sim = 0.0
+            second_best_gid = None
+            second_best_dist = 1.0
+            margin = 1.0
 
-            if best_id is not None:
-                print(f"  [REID MATCH] {camera_id} local {local_id} -> GID {best_id} (dist: {best_dist:.3f}, thr: {actual_threshold:.3f}, area: {box_area})")
-                gid = best_id
-                local_to_global[key] = gid
-                cam_templates = global_gallery.setdefault(gid, {})
-                templates = cam_templates.setdefault(camera_id, deque(maxlen=GALLERY_TEMPLATES_PER_ID))
-                
-                if len(templates) == 0:
-                    templates.append(embedding)
+            if candidates:
+                best_dist, best_gid = candidates[0]
+                best_sim = 1.0 - best_dist
+                if len(candidates) >= 2:
+                    second_best_dist, second_best_gid = candidates[1]
+                    margin = second_best_dist - best_dist
                 else:
-                    min_dist = min(_cos_dist(embedding, t) for t in templates)
-                    if min_dist > 0.08:
-                        templates.append(embedding)
-                        
-                global_last_seen[gid] = seen_at
+                    second_best_dist = 1.0
+                    second_best_gid = None
+                    margin = 1.0 - best_dist
             else:
-                # No match found.
-                if allow_new:
+                margin = 0.0
+
+            # Phase 3: Implement proper ambiguity checking
+            is_confident_match = (best_dist <= actual_threshold) and (margin >= REID_AMBIGUITY_MARGIN)
+
+            if is_confident_match:
+                # Check if this match recovers an old coasting ghost track's Global ID
+                if best_gid in ghost_claims:
+                    old_local_id, old_status = ghost_claims[best_gid]
+                    decision = "RECOVER_EXISTING_GLOBAL_ID"
+                    log_ghost_track_transition(
+                        camera_id=camera_id,
+                        old_local_id=old_local_id,
+                        old_gid=best_gid,
+                        new_local_id=local_id,
+                        best_gid=best_gid,
+                        best_dist=best_dist,
+                        second_gid=second_best_gid,
+                        second_dist=second_best_dist,
+                        margin=margin,
+                        decision="RECOVER_EXISTING_GLOBAL_ID",
+                        reason="STRONG_REID_MATCH"
+                    )
+                    # Release/rebind the old ghost track mapping so it cannot reclaim GID
+                    old_key = (camera_id, old_local_id)
+                    if old_key in local_to_global:
+                        del local_to_global[old_key]
+                else:
+                    # Classify match decision (Phase 9 & 11)
+                    has_other_cameras = any(cid != camera_id for cid in global_gallery[best_gid].keys())
+                    if has_other_cameras:
+                        decision = "CROSS_CAMERA_MATCH"
+                    else:
+                        decision = "MATCH_EXISTING"
+                
+                gid = best_gid
+                local_to_global[key] = gid
+                global_last_seen[gid] = seen_at
+                
+                # Quality check before gallery insertion
+                is_quality_ok = (confidence >= GALLERY_MIN_CONFIDENCE) and (box_area is not None and box_area >= GALLERY_MIN_BOX_AREA)
+                if is_quality_ok:
+                    cam_templates = global_gallery.setdefault(gid, {})
+                    templates = cam_templates.setdefault(camera_id, deque(maxlen=GALLERY_TEMPLATES_PER_ID))
+                    if len(templates) == 0:
+                        templates.append(embedding)
+                        timestamp_str = datetime.now().strftime("%H:%M:%S")
+                        print(f"[{timestamp_str}] [GALLERY UPDATE] Appended initial template to GID {gid} on camera {camera_id}")
+                    else:
+                        min_dist_to_templates = min(_cos_dist(embedding, t) for t in templates)
+                        if GALLERY_MIN_DIST < min_dist_to_templates < GALLERY_MAX_DIST:
+                            templates.append(embedding)
+                            timestamp_str = datetime.now().strftime("%H:%M:%S")
+                            print(f"[{timestamp_str}] [GALLERY UPDATE] Appended new template to GID {gid} on camera {camera_id} (min_dist: {min_dist_to_templates:.3f})")
+            else:
+                # If a ghost track candidate was evaluated but could not be confidently matched, log transition
+                if best_gid is not None and best_gid in ghost_claims:
+                    old_local_id, old_status = ghost_claims[best_gid]
+                    if best_dist <= actual_threshold and margin < REID_AMBIGUITY_MARGIN:
+                        log_ghost_track_transition(
+                            camera_id=camera_id,
+                            old_local_id=old_local_id,
+                            old_gid=best_gid,
+                            new_local_id=local_id,
+                            best_gid=best_gid,
+                            best_dist=best_dist,
+                            second_gid=second_best_gid,
+                            second_dist=second_best_dist,
+                            margin=margin,
+                            decision="AMBIGUOUS_MATCH",
+                            reason="AMBIGUITY_MARGIN_NOT_MET"
+                        )
+                    else:
+                        log_ghost_track_transition(
+                            camera_id=camera_id,
+                            old_local_id=old_local_id,
+                            old_gid=best_gid,
+                            new_local_id=local_id,
+                            best_gid=best_gid,
+                            best_dist=best_dist,
+                            second_gid=second_best_gid,
+                            second_dist=second_best_dist,
+                            margin=margin,
+                            decision="NEW_GLOBAL_ID" if allow_new else "FALLBACK_ID",
+                            reason="DISTANCE_EXCEEDS_THRESHOLD"
+                        )
+
+                # No confident match: check if registration is allowed or fallback
+                if best_dist <= actual_threshold and margin < REID_AMBIGUITY_MARGIN:
+                    decision = "UNCERTAIN_MATCH"
+                elif candidates:
+                    decision = "NEW_GLOBAL_ID" if allow_new else "FALLBACK_ID"
+                else:
+                    decision = "NEW_GLOBAL_ID" if allow_new else "FALLBACK_ID"
+
+                if allow_new and decision != "FALLBACK_ID":
+                    # Register new Global ID
                     gid = next_global_id
                     next_global_id += 1
-                    closest_info = f"{best_dist:.3f}" if candidates else "N/A"
-                    print(f"  [REID NEW] {camera_id} local {local_id} -> Registered GID {gid} (closest: {closest_info}, thr: {actual_threshold:.3f}, area: {box_area})")
-                    global_gallery[gid] = {camera_id: deque([embedding], maxlen=GALLERY_TEMPLATES_PER_ID)}
                     local_to_global[key] = gid
                     global_last_seen[gid] = seen_at
+                    
+                    # Phase 6: Ensure initial gallery embedding passes quality checks
+                    is_quality_ok = (confidence >= GALLERY_MIN_CONFIDENCE) and (box_area is not None and box_area >= GALLERY_MIN_BOX_AREA)
+                    if is_quality_ok:
+                        global_gallery[gid] = {camera_id: deque([embedding], maxlen=GALLERY_TEMPLATES_PER_ID)}
+                        timestamp_str = datetime.now().strftime("%H:%M:%S")
+                        print(f"[{timestamp_str}] [GALLERY UPDATE] Created new GID {gid} gallery on camera {camera_id} with initial template")
+                    else:
+                        global_gallery[gid] = {}
+                        timestamp_str = datetime.now().strftime("%H:%M:%S")
+                        print(f"[{timestamp_str}] [GALLERY WARNING] Created new GID {gid} with empty gallery (initial crop failed quality checks)")
                 else:
-                    # Skip registering, map to fallback GID
                     gid = fallback_id
                     local_to_global[key] = gid
+                    if not allow_new:
+                        decision = "FALLBACK_ID"
+
+            # Structured Logging for new decisions (Phase 11)
+            gallery_size = sum(len(v) for v in global_gallery[best_gid].values()) if (best_gid is not None and best_gid in global_gallery) else 0
+            timestamp_str = datetime.now().strftime("%H:%M:%S")
+            print(f"[{timestamp_str}]")
+            print(f"Camera: {camera_id}")
+            print(f"Local ID: {local_id}")
+            print(f"Area: {box_area}")
+            print(f"Conf: {confidence:.2f}")
+            print(f"Best GID: {best_gid if best_gid is not None else 'N/A'}")
+            print(f"Best Distance: {best_dist:.2f}")
+            print(f"Best Similarity: {best_sim:.2f}")
+            print(f"Second GID: {second_best_gid if second_best_gid is not None else 'N/A'}")
+            print(f"Second Distance: {second_best_dist:.2f}")
+            print(f"Margin: {margin:.2f}")
+            print(f"Gallery Size: {gallery_size}")
+            print(f"Decision: {decision}")
 
     # If it is positive, queue the database sync sighting task
     if gid > 0:
@@ -818,24 +1101,81 @@ def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRES
     return gid
 
 
-def reserve_existing_global_ids(camera_key, tracks):
+def classify_track_status(tracker, track_id):
+    """Classify track state as ACTIVE, COASTING, or STALE based on tracker time_since_update."""
+    if hasattr(tracker, 'tracker') and hasattr(tracker.tracker, 'tracks'):
+        for t in tracker.tracker.tracks:
+            if t.id == track_id:
+                tsu = getattr(t, 'time_since_update', 0)
+                if tsu == 0:
+                    return "ACTIVE"
+                elif tsu <= 15:
+                    return "COASTING"
+                else:
+                    return "STALE"
+    return "ACTIVE"
+
+
+def log_ghost_track_transition(camera_id, old_local_id, old_gid, new_local_id,
+                               best_gid, best_dist, second_gid, second_dist,
+                               margin, decision, reason):
+    """Targeted diagnostic logging for ghost track transitions."""
+    timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    print(f"\n[GHOST_TRACK_TRANSITION]")
+    print(f"timestamp={timestamp_str}")
+    print(f"camera={camera_id}")
+    print(f"old_local={old_local_id}")
+    print(f"old_gid={old_gid}")
+    print(f"new_local={new_local_id}")
+    print(f"best_gid={best_gid if best_gid is not None else 'N/A'}")
+    print(f"best_distance={best_dist:.2f}")
+    print(f"second_gid={second_gid if second_gid is not None else 'N/A'}")
+    print(f"second_distance={second_dist:.2f}")
+    print(f"margin={margin:.2f}")
+    print(f"old_gid_excluded_before_fix=true")
+    print(f"old_gid_considered_after_fix=true")
+    print(f"final_decision={decision}")
+    print(f"decision_reason={reason}\n")
+
+
+def reserve_existing_global_ids(camera_key, tracks, track_status_map=None):
     """Reserve mapped IDs before matching new tracks in the same frame.
 
-    This repairs any historical duplicate local mappings and prevents a new
-    local track from being assigned an identity already visible in this view.
+    Differentiates between:
+    - active_claimed: GIDs bound to local tracks actively detected in this frame.
+      These GIDs are strictly protected against duplicate assignment.
+    - ghost_claims: {gid: (old_local_id, status)} bound to coasting/stale tracks that
+      were Kalman-predicted without a real detection in this frame. These GIDs are
+      allowed to be reclaimed by a new track with strong Re-ID evidence.
     """
-    claimed = set()
+    if track_status_map is None:
+        track_status_map = {}
+
+    active_claimed = set()
+    ghost_claims = {}
+    claimed_all = set()
+
     with gallery_lock:
         for track in tracks:
-            key = (camera_key, int(track[4]))
+            local_id = int(track[4])
+            key = (camera_key, local_id)
             gid = local_to_global.get(key)
-            if gid is None:
+            if gid is None or gid <= 0:
                 continue
-            if gid in claimed:
+
+            # Remove duplicate mappings for the same camera view
+            if gid in claimed_all:
                 del local_to_global[key]
                 continue
-            claimed.add(gid)
-    return claimed
+
+            claimed_all.add(gid)
+            status = track_status_map.get(local_id, "ACTIVE")
+            if status == "ACTIVE":
+                active_claimed.add(gid)
+            else:
+                ghost_claims[gid] = (local_id, status)
+
+    return active_claimed, ghost_claims
 
 
 def prune_identity_state(now):
@@ -1110,23 +1450,30 @@ def camera_processing_loop(camera_key):
     state  = camera_states[camera_key]
     source = VIDEO_SOURCES[camera_key]["file"]
     is_live = isinstance(source, int)
+    is_upload = (source == "upload")
     cam_idx = CAMERA_INDEX[camera_key]
 
-    if is_live and sys.platform.startswith('win'):
-        cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+    cap = None
+    if not is_upload:
+        if is_live and sys.platform.startswith('win'):
+            cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+        else:
+            cap = cv2.VideoCapture(source)
+
+        if is_live:
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            print(f"[{camera_key}] Live camera buffer size set to 1 to prevent lag.")
+
+        if not cap.isOpened():
+            print(f"[{camera_key}] Error opening source {source}")
+            return
+
+    if is_upload:
+        fps = 15.0
+        frame_delay = 1.0 / fps
     else:
-        cap = cv2.VideoCapture(source)
-
-    if is_live:
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        print(f"[{camera_key}] Live camera buffer size set to 1 to prevent lag.")
-
-    if not cap.isOpened():
-        print(f"[{camera_key}] Error opening source {source}")
-        return
-
-    fps         = cap.get(cv2.CAP_PROP_FPS) or 25.0
-    frame_delay = 1.0 / fps
+        fps         = cap.get(cv2.CAP_PROP_FPS) or 25.0
+        frame_delay = 1.0 / fps
     frame_count = 0
     processed_count = 0
     prev_tracks = []
@@ -1154,10 +1501,11 @@ def camera_processing_loop(camera_key):
                 seek_target = camera_seek_targets[camera_key]
                 if seek_target is not None:
                     camera_seek_targets[camera_key] = None
-            if not is_active:
+            # Modified pause logic for live/uploaded streams so they run in the background
+            if not is_active and not (is_live or is_upload):
                 time.sleep(0.05)
                 continue
-            if seek_target is not None and not is_live:
+            if seek_target is not None and not is_live and not is_upload:
                 cap.set(cv2.CAP_PROP_POS_FRAMES, seek_target)
                 reset_tracker_tracks(camera_key)
                 clear_camera_track_bindings(camera_key)
@@ -1166,14 +1514,26 @@ def camera_processing_loop(camera_key):
                 frame_count = seek_target
 
             # Constant frame stepping to reduce CPU load and match real-time speed
-            if is_active and not is_live and FRAME_STEP > 1 and frame_count > 0:
+            if is_active and not is_live and not is_upload and FRAME_STEP > 1 and frame_count > 0:
                 for _ in range(FRAME_STEP - 1):
                     cap.grab()
                 frame_count += FRAME_STEP - 1
 
-            ret, frame = cap.read()
+            if is_upload:
+                q = upload_frame_queues.get(camera_key)
+                if q is not None:
+                    try:
+                        frame = q.get(timeout=0.03)
+                        ret = True
+                    except queue.Empty:
+                        ret = False
+                else:
+                    ret = False
+            else:
+                ret, frame = cap.read()
+
             if not ret:
-                if is_live:
+                if is_live or is_upload:
                     time.sleep(0.01)
                     continue
                 else:
@@ -1191,7 +1551,10 @@ def camera_processing_loop(camera_key):
             frame_count += 1
             processed_count += 1
             with state_lock:
-                video_positions[camera_key] = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
+                if is_upload or is_live:
+                    video_positions[camera_key] = frame_count
+                else:
+                    video_positions[camera_key] = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
             # Determine if this camera is currently shown in the browser.
             # Inactive cameras still process fully — they just skip encode + emit.
             with state_lock:
@@ -1208,7 +1571,7 @@ def camera_processing_loop(camera_key):
             run_detection = (processed_count % DETECT_EVERY_N == 0)
             inference_started = time.perf_counter()
             if run_detection:
-                results = local_model(frame, classes=[0], verbose=False, conf=0.20, iou=0.50, imgsz=480)
+                results = local_model(frame, classes=[0], verbose=False, conf=0.35, iou=0.50, imgsz=480)
                 dets = np.empty((0, 6))
                 if results[0].boxes is not None and len(results[0].boxes) > 0:
                     dets = np.column_stack([
@@ -1233,7 +1596,7 @@ def camera_processing_loop(camera_key):
             tracking_ms = (time.perf_counter() - tracking_started) * 1000.0 if run_detection else 0.0
 
             # ── Live validation scoring (Wildtrack GT) ──────────────────────────
-            if camera_key in ["cam1", "cam2", "cam3", "cam4", "cam5", "cam6", "cam7"]:
+            if not LIVE_DEMO_MODE and camera_key in ["cam1", "cam2", "cam3", "cam4", "cam5", "cam6", "cam7"]:
                 if frame_count % 5 == 0:
                     tp, fp, fn = evaluate_live_frame(tracks, frame_count, camera_key)
                     state["eval_tp"] = state.get("eval_tp", 0) + tp
@@ -1271,17 +1634,40 @@ def camera_processing_loop(camera_key):
             detection_data     = []
             current_zone_ids   = {z: set() for z in ZONES}
             frame_people_count = 0
-            # Reserve existing assignments first. New local tracks may only
-            # use an unclaimed global identity in this camera frame.
-            frame_claimed_gids = reserve_existing_global_ids(camera_key, tracks)
+
+            # Classify all tracks in this camera's tracker (ACTIVE, COASTING, STALE)
+            track_status_map = {}
+            if hasattr(tracker, 'tracker') and hasattr(tracker.tracker, 'tracks'):
+                for t in tracker.tracker.tracks:
+                    tsu = getattr(t, 'time_since_update', 0)
+                    if tsu == 0:
+                        track_status_map[t.id] = "ACTIVE"
+                    elif tsu <= 15:
+                        track_status_map[t.id] = "COASTING"
+                    else:
+                        track_status_map[t.id] = "STALE"
+
+            # Reserve active assignments and identify coasting ghost claims
+            active_claimed_gids, ghost_claims = reserve_existing_global_ids(
+                camera_key, tracks, track_status_map
+            )
+            frame_claimed_gids = set(active_claimed_gids)
+
+            # Process ACTIVE tracks first so genuine observations resolve and reclaim GIDs
+            # before coasting ghost tracks are evaluated
+            sorted_tracks = sorted(
+                tracks,
+                key=lambda trk: 0 if track_status_map.get(int(trk[4]), "ACTIVE") == "ACTIVE" else 1
+            )
 
             reid_started = time.perf_counter()
-            if len(tracks) > 0:
-                for track in tracks:
+            if len(sorted_tracks) > 0:
+                for track in sorted_tracks:
                     x1, y1   = int(track[0]), int(track[1])
                     x2, y2   = int(track[2]), int(track[3])
                     track_id = int(track[4])
                     conf     = float(track[6]) if len(track) > 6 else 1.0
+                    track_status = track_status_map.get(track_id, "ACTIVE")
 
                     foot_x = (x1 + x2) // 2
                     foot_y = y2
@@ -1302,22 +1688,30 @@ def camera_processing_loop(camera_key):
 
                     if run_detection:
                         try:
-                            for t in tracker.tracker.tracks:
-                                if t.id == track_id and t.features is not None and len(t.features) > 0:
-                                    emb       = np.array(t.features[-1])
-                                    emb       = emb / (np.linalg.norm(emb) + 1e-8)
-                                    box_area  = (x2 - x1) * (y2 - y1)
-                                    global_id = match_or_register(
-                                        camera_key, track_id, emb,
-                                        exclude_gids=frame_claimed_gids,
-                                        box_area=box_area,
-                                        frame=frame,
-                                        bbox=(x1, y1, x2, y2),
-                                        confidence=conf,
-                                        current_zone=current_zone
-                                    )
-                                    frame_claimed_gids.add(global_id)
-                                    break
+                            # Only evaluate Re-ID if the track is ACTIVE, or if already positively mapped
+                            # (coasting ghost tracks that have been superseded should not register new GIDs)
+                            should_match = (track_status == "ACTIVE") or (key in local_to_global and local_to_global[key] > 0)
+                            if should_match:
+                                for t in tracker.tracker.tracks:
+                                    if t.id == track_id and t.features is not None and len(t.features) > 0:
+                                        emb       = np.array(t.features[-1])
+                                        emb       = emb / (np.linalg.norm(emb) + 1e-8)
+                                        box_area  = (x2 - x1) * (y2 - y1)
+                                        global_id = match_or_register(
+                                            camera_key, track_id, emb,
+                                            exclude_gids=frame_claimed_gids,
+                                            box_area=box_area,
+                                            frame=frame,
+                                            bbox=(x1, y1, x2, y2),
+                                            confidence=conf,
+                                            current_zone=current_zone,
+                                            run_face_detection=True,
+                                            ghost_claims=ghost_claims
+                                        )
+                                        frame_claimed_gids.add(global_id)
+                                        if global_id in ghost_claims:
+                                            del ghost_claims[global_id]
+                                        break
                         except Exception as e:
                             print(f"[REID EXCEPTION] {e}")
 
@@ -1622,9 +2016,56 @@ def camera_processing_loop(camera_key):
                                 "zone":             ph.get("last_zone"),
                                 "zones_visited":    list(ph.get("zones_visited", set())),
                                 "zone_entry_count": ph.get("zone_entry_count", {}),
+                                "present":          True,
                             }
                             for gid, ph in state["person_history"].items()
                         ]
+                        
+                        # Add flagged targets who are either offline or visible on another camera feed
+                        active_gids = set(state["person_history"].keys())
+                        all_flagged_gids = global_flagged_ids | global_manually_flagged_ids
+                        for fgid in all_flagged_gids:
+                            if fgid not in active_gids:
+                                other_camera = None
+                                now_monotonic = time.time()
+                                for ocam_key, ostate in camera_states.items():
+                                    if ocam_key != camera_key:
+                                        with ostate["behavior_lock"]:
+                                            if fgid in ostate["person_history"]:
+                                                oph = ostate["person_history"][fgid]
+                                                last_t = oph.get("last_time")
+                                                if last_t and now_monotonic - last_t < 5.0:
+                                                    other_camera = VIDEO_SOURCES.get(ocam_key, {}).get("label", ocam_key)
+                                                    break
+                                
+                                if other_camera:
+                                    persons_payload.append({
+                                        "global_id":        fgid,
+                                        "score":            0.0,
+                                        "rule_score":       0.0,
+                                        "ml_score":         0.0,
+                                        "flagged":          True,
+                                        "manually_flagged": fgid in global_manually_flagged_ids,
+                                        "score_breakdown":  {},
+                                        "zone":             f"On {other_camera}",
+                                        "zones_visited":    [],
+                                        "zone_entry_count": {},
+                                        "present":          True,
+                                    })
+                                else:
+                                    persons_payload.append({
+                                        "global_id":        fgid,
+                                        "score":            0.0,
+                                        "rule_score":       0.0,
+                                        "ml_score":         0.0,
+                                        "flagged":          True,
+                                        "manually_flagged": fgid in global_manually_flagged_ids,
+                                        "score_breakdown":  {},
+                                        "zone":             "Not Present",
+                                        "zones_visited":    [],
+                                        "zone_entry_count": {},
+                                        "present":          False,
+                                    })
                     with training_lock:
                         n_seqs_now = len(training_seqs)
                     with ae_lock:
@@ -1652,7 +2093,8 @@ def camera_processing_loop(camera_key):
             # add: if not is_active: time.sleep(0.01)
             if is_active:
                 elapsed_proc = time.time() - t_start
-                sleep_time = (frame_delay * FRAME_STEP) - elapsed_proc
+                step_mult = 1 if (is_live or is_upload) else FRAME_STEP
+                sleep_time = (frame_delay * step_mult) - elapsed_proc
                 if sleep_time > 0:
                     time.sleep(sleep_time)
             else:
@@ -1819,10 +2261,45 @@ def flag_person():
     return jsonify({"status": "ok", "global_id": gid, "manually_flagged": flag})
 
 
+@app.route('/api/camera/upload/<camera_key>', methods=['POST'])
+def camera_upload(camera_key):
+    if camera_key not in VIDEO_SOURCES:
+        return jsonify({"status": "error", "message": "Unknown camera key"}), 400
+    
+    file = request.files.get('frame')
+    if not file:
+        return jsonify({"status": "error", "message": "No frame file uploaded"}), 400
+        
+    try:
+        img_bytes = file.read()
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is not None:
+            h, w = img.shape[:2]
+            if h > 480:
+                scale = 480.0 / h
+                img = cv2.resize(img, (int(w * scale), 480))
+            
+            q = upload_frame_queues.get(camera_key)
+            if q is not None:
+                if q.full():
+                    try:
+                        q.get_nowait()
+                    except Exception:
+                        pass
+                q.put(img)
+                # Ensure the background processing thread is running for this camera
+                ensure_camera_started(camera_key)
+                return jsonify({"status": "ok"})
+        return jsonify({"status": "error", "message": "Failed to decode image"}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
 @app.route('/api/reset_database', methods=['POST'])
 def reset_database():
     """Clear all dynamic database tracking data (persons, embeddings, sightings, dwell times, alerts) to start fresh."""
-    global next_global_id, global_gallery, global_face_gallery, local_to_global, global_last_seen, search_history_log
+    global next_global_id, global_gallery, global_face_gallery, local_to_global, global_last_seen, search_history_log, face_aligned_tracks, track_last_face_check
     session = db_session()
     try:
         session.query(Alert).delete()
@@ -1847,6 +2324,8 @@ def reset_database():
             global_face_gallery.clear()
             local_to_global.clear()
             global_last_seen.clear()
+            face_aligned_tracks.clear()
+            track_last_face_check.clear()
             next_global_id = 1
             
         tracked_global_ids.clear()
@@ -2213,6 +2692,12 @@ def _load_gallery_from_db():
                 gid = p.person_id
                 if gid > max_id:
                     max_id = gid
+                
+                if p.is_flagged_suspicious:
+                    if p.flagged_reason and "Manually" in p.flagged_reason:
+                        global_manually_flagged_ids.add(gid)
+                    else:
+                        global_flagged_ids.add(gid)
                 
                 embs = session.query(PersonEmbedding).filter(
                     PersonEmbedding.person_id == gid,
