@@ -147,6 +147,9 @@
     }
     .now-playing { font-size:12px; color:#64748b; }
     .now-playing span { font-weight:600; color:#3b82f6; }
+    .camera-health { font-size:12px; color:#16a34a; font-weight:600; }
+    .camera-health.stale { color:#d97706; }
+    .camera-health.reconnecting { color:#dc2626; }
 
     /* ZONE PANEL */
     .zone-panel { display:flex; flex-direction:column; gap:14px; }
@@ -881,7 +884,7 @@
       <img class="video-feed" id="video-canvas" src="/video_feed" alt="Live Feed"/>
       <div class="video-footer">
         <div class="now-playing">Now playing: <span id="now-playing-label">Camera 1</span></div>
-        <div class="now-playing">YOLOv8 + StrongSort + OSNet</div>
+        <div class="camera-health" id="camera-health" aria-live="polite">Waiting for camera status…</div>
       </div>
     </div>
 
@@ -1146,6 +1149,33 @@
   // });
 
   const CAM_LABELS = { cam1:'Camera 1', cam2:'Camera 2', cam3:'Camera 3', cam4:'Camera 4', cam5:'Camera 5', cam6:'Camera 6', cam7:'Camera 7', live:'Live Camera' };
+  let selectedCameraKey = 'cam1';
+  const cameraHealthEl = document.getElementById('camera-health');
+  async function refreshCameraHealth(){
+    if (!cameraHealthEl) return;
+    try {
+      const response = await fetch('/health/metrics', {cache:'no-store'});
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      const camera = data.cameras && data.cameras[selectedCameraKey];
+      if (!camera) throw new Error('camera status unavailable');
+      const streamAge = camera.last_stream_frame_age_seconds;
+      const ageLabel = streamAge == null ? 'no displayed frames' : `${streamAge.toFixed(1)}s since displayed frame`;
+      const readFailures = Math.max(camera.consecutive_read_failures, camera.client_last_read_failure_burst || 0);
+      const reconnects = camera.reconnection_attempts + (camera.client_reconnection_attempts || 0);
+      const detail = `${camera.arrival_fps.toFixed(1)} fps · ${ageLabel} · ${readFailures} read failures · ${reconnects} reconnects`;
+      cameraHealthEl.textContent = `${camera.status.toUpperCase()} · ${detail}`;
+      cameraHealthEl.className = `camera-health ${camera.status === 'stale' || camera.status === 'waiting' ? 'stale' : (camera.status === 'reconnecting' ? 'reconnecting' : '')}`;
+      cameraHealthEl.title = camera.last_error || '';
+      videoFeedEl.style.visibility = ['stale','waiting','reconnecting'].includes(camera.status) ? 'hidden' : 'visible';
+    } catch (error) {
+      cameraHealthEl.textContent = `STATUS UNAVAILABLE · ${error.message}`;
+      cameraHealthEl.className = 'camera-health stale';
+      videoFeedEl.style.visibility = 'hidden';
+    }
+  }
+  refreshCameraHealth();
+  setInterval(refreshCameraHealth, 2000);
   const ZONE_COLORS = {
     a:{normal:'#3b82f6',alert:'#ef4444'},
     b:{normal:'#22c55e',alert:'#ef4444'},
@@ -1154,6 +1184,9 @@
 
   // ── VIDEO SWITCH ───────────────────────────────────────────────────────────
   function switchVideo(key,btn){
+    selectedCameraKey = key;
+    videoFeedEl.style.visibility = 'hidden';
+    refreshCameraHealth();
     document.querySelectorAll('.vid-btn').forEach(b=>b.classList.remove('active'));
     btn.classList.add('active');
     const label = CAM_LABELS[key]||key;
@@ -1185,6 +1218,7 @@
 
   // ── STATS UPDATE ───────────────────────────────────────────────────────────
   socket.on('stats', function(data){
+    if (data.video && data.video !== selectedCameraKey) return;
     const totalEl = document.getElementById('total-count');
     if (totalEl && totalEl.textContent !== String(data.total)) {
       totalEl.textContent = data.total;
@@ -1564,7 +1598,10 @@
     });
   }
 
-  socket.on('person_data', function(data){ renderPersonList(data.persons||[]); });
+  socket.on('person_data', function(data){
+    if (data.camera_key && data.camera_key !== selectedCameraKey) return;
+    renderPersonList(data.persons||[]);
+  });
 
   // ── TOAST ALERTS ───────────────────────────────────────────────────────────
   socket.on('suspicious_alert', function(data){ showSuspiciousToast(data); });

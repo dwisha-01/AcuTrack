@@ -54,6 +54,7 @@ from boxmot.trackers.strongsort.strongsort import StrongSort
 from pathlib import Path
 from collections import deque
 import queue
+import json
 import cv2
 import time
 import threading
@@ -140,6 +141,98 @@ else:
 
 # Thread-safe queues to receive webcam frames uploaded from Laptop 2 & Laptop 3
 upload_frame_queues = {k: queue.Queue(maxsize=2) for k in VIDEO_SOURCES}
+
+# Per-source health stays independent of the rolling process-wide performance
+# counters. Timestamps are wall-clock values for the dashboard and diagnostics.
+camera_health_lock = threading.Lock()
+camera_health = {
+    key: {
+        "status": "waiting", "last_frame_at": None, "last_processed_at": None,
+        "last_stream_frame_at": None,
+        "arrival_fps": 0.0, "processing_fps": 0.0, "frames_received": 0,
+        "worker_status": "stopped", "frames_dropped": 0,
+        "processing_latency_ms": 0.0,
+        "frames_processed": 0, "consecutive_read_failures": 0,
+        "reconnection_attempts": 0, "client_reconnection_attempts": 0,
+        "client_last_read_failure_burst": 0, "last_error": None,
+        "_last_arrival_mono": None, "_last_process_mono": None,
+        "_arrival_samples": deque(maxlen=20), "_process_samples": deque(maxlen=20),
+    }
+    for key in VIDEO_SOURCES
+}
+
+
+def update_camera_health(camera_key, **updates):
+    with camera_health_lock:
+        camera_health[camera_key].update(updates)
+
+
+def record_camera_frame(camera_key, processed=False):
+    now_wall = time.time()
+    now_mono = time.monotonic()
+    with camera_health_lock:
+        health = camera_health[camera_key]
+        if processed:
+            health["frames_processed"] += 1
+            health["last_processed_at"] = now_wall
+            health["status"] = "connected"
+            health["worker_status"] = "running"
+            health["last_error"] = None
+            samples = health["_process_samples"]
+            previous = health["_last_process_mono"]
+            health["_last_process_mono"] = now_mono
+            if previous is not None:
+                samples.append(now_mono - previous)
+                health["processing_fps"] = round(len(samples) / sum(samples), 2) if sum(samples) else 0.0
+        else:
+            health["frames_received"] += 1
+            health["last_frame_at"] = now_wall
+            health["consecutive_read_failures"] = 0
+            health["last_error"] = None
+            samples = health["_arrival_samples"]
+            previous = health["_last_arrival_mono"]
+            health["_last_arrival_mono"] = now_mono
+            if previous is not None:
+                samples.append(now_mono - previous)
+                health["arrival_fps"] = round(len(samples) / sum(samples), 2) if sum(samples) else 0.0
+
+
+def enqueue_latest_camera_frame(camera_key, frame, captured_at=None):
+    """Nonblocking, bounded latest-frame insertion for remote camera uploads."""
+    q = upload_frame_queues[camera_key]
+    item = (time.monotonic() if captured_at is None else captured_at, frame)
+    dropped = 0
+    while True:
+        try:
+            q.put_nowait(item)
+            break
+        except queue.Full:
+            try:
+                q.get_nowait()
+                dropped += 1
+            except queue.Empty:
+                continue
+    if dropped:
+        with camera_health_lock:
+            camera_health[camera_key]["frames_dropped"] += dropped
+    return dropped
+
+
+def camera_retry_delay(current_delay):
+    """Exponential recovery backoff, capped so retries stay periodic."""
+    return min(10.0, max(1.0, current_delay * 1.5))
+
+
+def record_camera_read_failure(camera_key):
+    with camera_health_lock:
+        health = camera_health[camera_key]
+        health["consecutive_read_failures"] += 1
+        failures = health["consecutive_read_failures"]
+        if failures >= 10:
+            health["status"] = "recovering"
+            health["worker_status"] = "recovering"
+            health["last_error"] = f"{failures} consecutive camera read failures"
+        return failures
 
 # FIX: stable per-camera index used to namespace fallback IDs (see below) so
 # they can never collide across cameras.
@@ -459,6 +552,7 @@ global_face_gallery = {}
 local_to_global = {}
 global_last_seen = {}
 next_global_id  = 1
+_global_id_diagnostic_seen = set()
 face_aligned_tracks = set()
 track_last_face_check = {}
 # FIX: yolo_lock REMOVED — each camera now has its own YOLO model instance,
@@ -470,6 +564,7 @@ track_last_face_check = {}
 # then keep running so switching back to it doesn't lose warm state.
 camera_threads_started = {k: False for k in VIDEO_SOURCES}
 camera_threads_lock    = threading.Lock()
+camera_worker_threads   = {k: None for k in VIDEO_SOURCES}
 
 # ── CROSS-CAMERA RE-ID MATCHING PARAMS ────────────────────────────────────────
 # FIX (this revision): the gallery used to store ONE blended running-average
@@ -690,6 +785,20 @@ def _cos_dist(a, b):
     return 1.0 - float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-8))
 
 
+def emit_global_id_diagnostic(event):
+    """Emit one grep-friendly JSON record for a Global ID decision."""
+    print("GLOBAL_ID_DIAG " + json.dumps(event, sort_keys=True, separators=(",", ":"), allow_nan=False))
+
+
+def _global_id_diag_once(key, event):
+    """Avoid repeating the same local-track decision on every detection frame."""
+    diagnostic_key = (key[0], key[1], event.get("assigned_gid"))
+    if diagnostic_key in _global_id_diagnostic_seen:
+        return
+    _global_id_diagnostic_seen.add(diagnostic_key)
+    emit_global_id_diagnostic(event)
+
+
 def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRESHOLD,
                        exclude_gids=None, box_area=None, frame=None, bbox=None, confidence=1.0, current_zone=None,
                        run_face_detection=True, ghost_claims=None):
@@ -702,19 +811,74 @@ def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRES
         ghost_claims = {}
     key = (camera_id, local_id)
     seen_at = time.monotonic()
+    embedding_dim = int(np.asarray(embedding).size) if embedding is not None else None
+    embedding_norm = float(np.linalg.norm(embedding)) if embedding is not None else None
+    embedding_valid = bool(
+        embedding is not None and embedding_dim > 0 and np.isfinite(embedding_norm) and embedding_norm > 1e-8
+    )
+    diagnostic = {
+        "event": "global_id_decision",
+        "timestamp": datetime.now().astimezone().isoformat(timespec="milliseconds"),
+        "camera_key": camera_id,
+        "local_track_id": int(local_id),
+        "box_area": box_area,
+        "detection_confidence": float(confidence) if confidence is not None else None,
+        "embedding_available": embedding is not None,
+        "embedding_dimension": embedding_dim,
+        "embedding_norm": embedding_norm,
+        "embedding_valid": embedding_valid,
+        "candidate_gid_count": 0,
+        "gallery_gid_count": 0,
+        "gallery_template_count": 0,
+        "empty_gallery_gid_count": 0,
+        "empty_gallery_gids": [],
+        "excluded_gid_count": 0,
+        "excluded_gids": [],
+        "best_candidate_gid": None,
+        "best_cosine_distance": None,
+        "second_best_candidate_gid": None,
+        "second_best_cosine_distance": None,
+        "actual_threshold": None,
+        "required_ambiguity_margin": REID_AMBIGUITY_MARGIN,
+        "actual_margin": None,
+        "best_candidate_excluded": False,
+        "best_candidate_template_count": 0,
+        "best_candidate_gallery_empty": None,
+        "assigned_gid_template_count": 0,
+        "assigned_gid_gallery_empty": None,
+        "new_gid_template_added": None,
+        "new_gid_template_rejection_reason": None,
+        "decision_source": "osnet",
+        "osnet_matching_performed": False,
+        "local_binding_status": "unbound",
+        "matching_result": None,
+        "decision": None,
+        "assigned_gid": None,
+        "reason": None,
+    }
     
     # Adaptive threshold for small (far-away) crops starting from central configured threshold
     actual_threshold = threshold
     if box_area is not None and box_area < 6000:
         fraction = max(0.0, min(1.0, (6000.0 - box_area) / 6000.0))
         actual_threshold = threshold + fraction * 0.08  # scale threshold up slightly for smaller, noisier crops
+    diagnostic["actual_threshold"] = actual_threshold
         
     # Quality filter: completely bypass gallery matching for extremely small boxes
     if box_area is not None and box_area < 100:
-        return -(CAMERA_INDEX[camera_id] * 100000 + local_id + 1)
+        gid = -(CAMERA_INDEX[camera_id] * 100000 + local_id + 1)
+        diagnostic.update(decision_source="osnet", decision="small_box", matching_result="not_attempted", assigned_gid=gid,
+                          reason="box_area_below_minimum_for_matching")
+        _global_id_diag_once(key, diagnostic)
+        return gid
         
     allow_new = (box_area is None or box_area >= 1200)
     fallback_id = -(CAMERA_INDEX[camera_id] * 100000 + local_id + 1)
+
+    if embedding is None:
+        diagnostic.update(decision="embedding_unavailable", matching_result="embedding_unavailable",
+                          reason="track_has_no_embedding_feature")
+        _global_id_diag_once(key, diagnostic)
     
     # Try to match face if visible
     face_gid = None
@@ -758,7 +922,20 @@ def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRES
                     print(f"[LIVE FACE MATCH EXCEPTION] {e_face}")
 
     with gallery_lock:
+        had_positive_binding = key in local_to_global and local_to_global[key] > 0
+        if key in local_to_global and local_to_global[key] <= 0:
+            diagnostic["local_binding_status"] = "negative_fallback_recheck"
+        diagnostic["gallery_gid_count"] = len(global_gallery)
+        diagnostic["gallery_template_count"] = sum(
+            len(templates) for cam_templates in global_gallery.values()
+            for templates in cam_templates.values()
+        )
+        if had_positive_binding:
+            diagnostic["decision_source"] = "existing_binding"
+            diagnostic["decision"] = "existing_binding"
+            diagnostic["local_binding_status"] = "positive_binding"
         if face_gid is not None:
+            diagnostic["decision_source"] = "face"
             old_gid = local_to_global.get(key)
             if old_gid is not None and old_gid > 0 and old_gid != face_gid:
                 print(f"  [FACE ID CORRECTION] Correcting {camera_id} local {local_id} from GID {old_gid} to GID {face_gid}")
@@ -857,6 +1034,14 @@ def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRES
         # Check if already resolved to a positive global ID
         if key in local_to_global and local_to_global[key] > 0:
             gid = local_to_global[key]
+            if face_gid is not None:
+                diagnostic.update(decision="face_match", matching_result="face_match", reason="face_similarity_passed")
+            elif not had_positive_binding:
+                diagnostic.update(decision="face_match", matching_result="face_match", reason="face_similarity_passed")
+            else:
+                diagnostic.update(decision="existing_binding", matching_result="existing_binding",
+                                  reason="positive_local_binding_reused")
+            diagnostic["assigned_gid"] = gid
             global_last_seen[gid] = seen_at
             
             # Phase 5/6: Prevent gallery contamination by validating crop quality before inserting
@@ -878,8 +1063,12 @@ def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRES
         else:
             # Not yet matched or mapped to negative fallback. Try to match it against gallery.
             candidates = []
+            empty_gallery_gid_count = 0
+            excluded_gid_count = 0
             for m_gid, cam_templates in global_gallery.items():
                 if exclude_gids and m_gid in exclude_gids:
+                    excluded_gid_count += 1
+                    diagnostic["excluded_gids"].append(m_gid)
                     continue
                 if seen_at - global_last_seen.get(m_gid, 0.0) > REID_RECENT_WINDOW_SECONDS:
                     continue
@@ -890,12 +1079,19 @@ def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRES
                     for t in templates:
                         all_dists.append(_cos_dist(embedding, t))
                 if not all_dists:
+                    empty_gallery_gid_count += 1
+                    diagnostic["empty_gallery_gids"].append(m_gid)
                     continue
                 
                 min_dist = min(all_dists)
                 candidates.append((min_dist, m_gid))
                 
             candidates.sort(key=lambda c: c[0])
+            diagnostic["osnet_matching_performed"] = True
+            diagnostic["candidate_gid_count"] = len(candidates)
+            diagnostic["empty_gallery_gid_count"] = empty_gallery_gid_count
+            diagnostic["excluded_gid_count"] = excluded_gid_count
+            diagnostic["actual_threshold"] = actual_threshold
 
             best_gid = None
             best_dist = 1.0
@@ -919,6 +1115,19 @@ def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRES
 
             # Phase 3: Implement proper ambiguity checking
             is_confident_match = (best_dist <= actual_threshold) and (margin >= REID_AMBIGUITY_MARGIN)
+            diagnostic.update(
+                best_candidate_gid=best_gid,
+                best_cosine_distance=best_dist if best_gid is not None else None,
+                second_best_candidate_gid=second_best_gid,
+                second_best_cosine_distance=second_best_dist if second_best_gid is not None else None,
+                actual_margin=margin if best_gid is not None else None,
+                best_candidate_template_count=(
+                    sum(len(v) for v in global_gallery.get(best_gid, {}).values()) if best_gid is not None else 0
+                ),
+                best_candidate_gallery_empty=(
+                    not any(global_gallery.get(best_gid, {}).values()) if best_gid is not None else None
+                ),
+            )
 
             if is_confident_match:
                 # Check if this match recovers an old coasting ghost track's Global ID
@@ -951,6 +1160,8 @@ def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRES
                         decision = "MATCH_EXISTING"
                 
                 gid = best_gid
+                diagnostic.update(decision="match", matching_result="match",
+                                  reason="distance_and_ambiguity_margin_passed")
                 local_to_global[key] = gid
                 global_last_seen[gid] = seen_at
                 
@@ -1021,17 +1232,48 @@ def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRES
                     is_quality_ok = (confidence >= GALLERY_MIN_CONFIDENCE) and (box_area is not None and box_area >= GALLERY_MIN_BOX_AREA)
                     if is_quality_ok:
                         global_gallery[gid] = {camera_id: deque([embedding], maxlen=GALLERY_TEMPLATES_PER_ID)}
+                        diagnostic["new_gid_template_added"] = True
                         timestamp_str = datetime.now().strftime("%H:%M:%S")
                         print(f"[{timestamp_str}] [GALLERY UPDATE] Created new GID {gid} gallery on camera {camera_id} with initial template")
                     else:
                         global_gallery[gid] = {}
+                        diagnostic["new_gid_template_added"] = False
+                        diagnostic["new_gid_template_rejection_reason"] = (
+                            "confidence_below_gallery_minimum" if confidence < GALLERY_MIN_CONFIDENCE
+                            else "box_area_below_gallery_minimum"
+                        )
                         timestamp_str = datetime.now().strftime("%H:%M:%S")
                         print(f"[{timestamp_str}] [GALLERY WARNING] Created new GID {gid} with empty gallery (initial crop failed quality checks)")
+                    diagnostic.update(
+                        decision="new_gid",
+                        matching_result=("rejected_ambiguity" if candidates and best_dist <= actual_threshold
+                                         and margin < REID_AMBIGUITY_MARGIN else
+                                         "rejected_distance" if candidates else
+                                         "empty_gallery" if empty_gallery_gid_count else "no_candidate"),
+                        reason=("rejected_ambiguity_new_gid" if candidates and best_dist <= actual_threshold
+                                and margin < REID_AMBIGUITY_MARGIN else
+                                "rejected_distance_new_gid" if candidates else
+                                "empty_gallery_templates_unavailable" if empty_gallery_gid_count else
+                                "no_eligible_gallery_candidates"),
+                    )
                 else:
                     gid = fallback_id
                     local_to_global[key] = gid
                     if not allow_new:
                         decision = "FALLBACK_ID"
+                    diagnostic.update(
+                        decision="negative_fallback",
+                        matching_result=("rejected_ambiguity" if candidates and best_dist <= actual_threshold
+                                         and margin < REID_AMBIGUITY_MARGIN else
+                                         "rejected_distance" if candidates else
+                                         "empty_gallery" if empty_gallery_gid_count else "no_candidate"),
+                        reason=("rejected_ambiguity_new_gid_disallowed" if candidates and best_dist <= actual_threshold
+                                and margin < REID_AMBIGUITY_MARGIN else
+                                "rejected_distance_new_gid_disallowed" if candidates else
+                                "no_eligible_gallery_candidate_new_gid_disallowed"),
+                    )
+
+            diagnostic["assigned_gid"] = gid
 
             # Structured Logging for new decisions (Phase 11)
             gallery_size = sum(len(v) for v in global_gallery[best_gid].values()) if (best_gid is not None and best_gid in global_gallery) else 0
@@ -1049,6 +1291,16 @@ def match_or_register(camera_id, local_id, embedding, threshold=REID_MATCH_THRES
             print(f"Margin: {margin:.2f}")
             print(f"Gallery Size: {gallery_size}")
             print(f"Decision: {decision}")
+
+        if diagnostic["decision"] is None:
+            diagnostic.update(decision="negative_fallback", matching_result="no_candidate",
+                              reason="no_positive_binding_or_match")
+        diagnostic["assigned_gid"] = gid
+        if gid > 0:
+            assigned_templates = global_gallery.get(gid, {})
+            diagnostic["assigned_gid_template_count"] = sum(len(v) for v in assigned_templates.values())
+            diagnostic["assigned_gid_gallery_empty"] = diagnostic["assigned_gid_template_count"] == 0
+        _global_id_diag_once(key, diagnostic)
 
     # If it is positive, queue the database sync sighting task
     if gid > 0:
@@ -1394,6 +1646,17 @@ def clear_camera_track_bindings(camera_key):
         for key in list(local_to_global):
             if key[0] == camera_key:
                 del local_to_global[key]
+    for key in list(face_aligned_tracks):
+        if key[0] == camera_key:
+            face_aligned_tracks.discard(key)
+    for key in list(track_last_face_check):
+        if key[0] == camera_key:
+            del track_last_face_check[key]
+    with gallery_lock:
+        _global_id_diagnostic_seen.difference_update(
+            diagnostic_key for diagnostic_key in list(_global_id_diagnostic_seen)
+            if diagnostic_key[0] == camera_key
+        )
 
 
 def reset_camera_stats(camera_key, keep_flagged=True):
@@ -1410,6 +1673,10 @@ def reset_camera_stats(camera_key, keep_flagged=True):
                 gid = local_to_global[key]
                 if not (keep_flagged and (gid in global_flagged_ids or gid in global_manually_flagged_ids)):
                     del local_to_global[key]
+                    _global_id_diagnostic_seen.difference_update(
+                        diagnostic_key for diagnostic_key in list(_global_id_diagnostic_seen)
+                        if diagnostic_key[0] == camera_key and diagnostic_key[1] == key[1]
+                    )
 
     for z in ZONES:
         state["zone_counts"][z] = 0
@@ -1435,6 +1702,16 @@ def reset_camera_stats(camera_key, keep_flagged=True):
             state["person_history"].clear()
 
 
+def open_camera_capture(source, is_live):
+    if is_live and sys.platform.startswith('win'):
+        cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
+    else:
+        cap = cv2.VideoCapture(source)
+    if is_live:
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    return cap
+
+
 # ── MAIN CAMERA PROCESSING LOOP ───────────────────────────────────────────────
 
 def camera_processing_loop(camera_key):
@@ -1452,21 +1729,20 @@ def camera_processing_loop(camera_key):
     is_live = isinstance(source, int)
     is_upload = (source == "upload")
     cam_idx = CAMERA_INDEX[camera_key]
+    update_camera_health(camera_key, status="connecting", worker_status="starting")
 
     cap = None
     if not is_upload:
-        if is_live and sys.platform.startswith('win'):
-            cap = cv2.VideoCapture(source, cv2.CAP_DSHOW)
-        else:
-            cap = cv2.VideoCapture(source)
+        cap = open_camera_capture(source, is_live)
 
         if is_live:
-            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
             print(f"[{camera_key}] Live camera buffer size set to 1 to prevent lag.")
 
         if not cap.isOpened():
-            print(f"[{camera_key}] Error opening source {source}")
-            return
+            cap.release()
+            update_camera_health(camera_key, status="reconnecting", last_error=f"Could not open source {source}")
+            raise RuntimeError(f"could not open source {source}")
+        update_camera_health(camera_key, status="connected", worker_status="running", last_error=None)
 
     if is_upload:
         fps = 15.0
@@ -1482,7 +1758,12 @@ def camera_processing_loop(camera_key):
     # FIX: Each camera thread loads its own YOLO model — no shared lock needed.
     # Previously all cameras shared one model behind yolo_lock, which serialized
     # all YOLO calls. Now each runs its own inference in true parallel.
-    local_model = _load_yolo()
+    try:
+        local_model = _load_yolo()
+    except Exception:
+        if cap is not None:
+            cap.release()
+        raise
     print(f"[{camera_key}] YOLO model loaded — running independently.")
 
     state["prev_dets"]          = np.empty((0, 6))
@@ -1523,7 +1804,13 @@ def camera_processing_loop(camera_key):
                 q = upload_frame_queues.get(camera_key)
                 if q is not None:
                     try:
-                        frame = q.get(timeout=0.03)
+                        frame_item = q.get(timeout=0.03)
+                        if isinstance(frame_item, tuple) and len(frame_item) == 2:
+                            captured_at, frame = frame_item
+                            latency_ms = max(0.0, (time.monotonic() - captured_at) * 1000.0)
+                            update_camera_health(camera_key, processing_latency_ms=round(latency_ms, 2))
+                        else:  # tolerate a frame queued by older in-process code
+                            frame = frame_item
                         ret = True
                     except queue.Empty:
                         ret = False
@@ -1534,6 +1821,10 @@ def camera_processing_loop(camera_key):
 
             if not ret:
                 if is_live or is_upload:
+                    if is_live:
+                        failures = record_camera_read_failure(camera_key)
+                        if failures >= 10:
+                            raise RuntimeError(f"camera read failed {failures} consecutive times")
                     time.sleep(0.01)
                     continue
                 else:
@@ -1547,9 +1838,13 @@ def camera_processing_loop(camera_key):
                         time.sleep(0.01)
                         continue
 
+            if not is_upload:
+                record_camera_frame(camera_key)
             frame = cv2.resize(frame, (FRAME_W, FRAME_H))
             frame_count += 1
             processed_count += 1
+            record_camera_frame(camera_key, processed=True)
+            update_camera_health(camera_key, status="connected", worker_status="running")
             with state_lock:
                 if is_upload or is_live:
                     video_positions[camera_key] = frame_count
@@ -1969,15 +2264,21 @@ def camera_processing_loop(camera_key):
                 print('='*60)
 
             # ── Encode frame + broadcast stats (active camera only) ───────────────
+            with state_lock:
+                is_active = camera_key == current_video
             if is_active:
                 encode_started = time.perf_counter()
                 ok, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
                 encode_ms = (time.perf_counter() - encode_started) * 1000.0
                 if ok:
                     with frame_condition:
-                        latest_frame = buffer.tobytes()
-                        latest_frame_seq += 1
-                        frame_condition.notify_all()
+                        # A camera switch may race with this encode. Publish only
+                        # if this frame still belongs to the selected camera.
+                        if camera_key == current_video:
+                            latest_frame = buffer.tobytes()
+                            latest_frame_seq += 1
+                            update_camera_health(camera_key, last_stream_frame_at=time.time())
+                            frame_condition.notify_all()
 
                 # Stream actual frame via Socket.IO is commented out to optimize memory & CPU.
                 # The frontend now uses native MJPEG streaming from the /video_feed HTTP route.
@@ -2078,7 +2379,7 @@ def camera_processing_loop(camera_key):
                             "threshold":     round(ae_threshold, 5),
                             "ml_weight":     ML_WEIGHT,
                         }
-                    socketio.emit("person_data", {"persons": persons_payload})
+                    socketio.emit("person_data", {"camera_key": camera_key, "persons": persons_payload})
 
             record_performance(
                 inference_ms if run_detection else None,
@@ -2118,13 +2419,63 @@ def ensure_camera_started(camera_key):
     to start before you've ever looked at it.
     """
     with camera_threads_lock:
-        if camera_threads_started.get(camera_key):
+        existing = camera_worker_threads.get(camera_key)
+        if camera_threads_started.get(camera_key) and existing and existing.is_alive():
             return
         camera_threads_started[camera_key] = True
-
-    t = threading.Thread(target=camera_processing_loop, args=(camera_key,), daemon=True)
-    t.start()
+        update_camera_health(camera_key, worker_status="starting")
+        t = threading.Thread(target=camera_worker, args=(camera_key,), daemon=True,
+                             name=f"camera-worker-{camera_key}")
+        camera_worker_threads[camera_key] = t
+        t.start()
     print(f"  [on-demand] Started camera thread: {camera_key}")
+
+
+def prepare_camera_recovery(camera_key, error):
+    """Reset only camera-local tracker bindings and publish its recovery state."""
+    print(f"[{camera_key}] Camera worker recovering: {error}")
+    update_camera_health(camera_key, status="reconnecting", worker_status="recovering", last_error=error)
+    with camera_health_lock:
+        camera_health[camera_key]["reconnection_attempts"] += 1
+        camera_health[camera_key]["consecutive_read_failures"] = 0
+    clear_camera_track_bindings(camera_key)
+    with tracker_init_lock:
+        trackers[camera_key] = None
+
+
+def camera_worker_cycle(camera_key):
+    """Run one processing lifetime and convert exits/errors into recoveries."""
+    try:
+        camera_processing_loop(camera_key)
+        error = "Camera processing loop exited unexpectedly"
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+    prepare_camera_recovery(camera_key, error)
+    return error
+
+
+def camera_worker(camera_key):
+    """Supervise one camera pipeline with bounded periodic reconnect attempts."""
+    retry_delay = 1.0
+    update_camera_health(camera_key, worker_status="starting")
+    try:
+        while True:
+            try:
+                camera_worker_cycle(camera_key)
+            except Exception as exc:
+                # Recovery itself can fail (for example, cleanup state was
+                # corrupted). Keep this camera retryable and report the failure.
+                error = f"Recovery error: {type(exc).__name__}: {exc}"
+                print(f"[{camera_key}] {error}")
+                update_camera_health(camera_key, status="recovering", worker_status="recovering", last_error=error)
+                with camera_health_lock:
+                    camera_health[camera_key]["reconnection_attempts"] += 1
+            time.sleep(retry_delay)
+            retry_delay = camera_retry_delay(retry_delay)
+    finally:
+        update_camera_health(camera_key, worker_status="stopped")
+        with camera_threads_lock:
+            camera_threads_started[camera_key] = False
 
 
 # ── ROUTES ────────────────────────────────────────────────────────────────────
@@ -2161,7 +2512,7 @@ def video_feed():
 
 @app.route('/health/metrics')
 def health_metrics():
-    """Small JSON snapshot for repeatable performance measurement."""
+    """Process and per-camera stream health snapshot."""
     process = psutil.Process(os.getpid())
     with state_lock:
         metrics = {
@@ -2175,6 +2526,40 @@ def health_metrics():
     with gallery_lock:
         metrics["gallery_identities"] = len(global_gallery)
         metrics["local_identity_mappings"] = len(local_to_global)
+    now = time.time()
+    with camera_health_lock:
+        camera_metrics = {}
+        for key, health in camera_health.items():
+            snapshot = {name: value for name, value in health.items() if not name.startswith("_")}
+            last_frame_at = health["last_frame_at"]
+            age = round(max(0.0, now - last_frame_at), 2) if last_frame_at else None
+            snapshot["last_frame_age_seconds"] = age
+            last_processed_at = health["last_processed_at"]
+            processed_age = round(max(0.0, now - last_processed_at), 2) if last_processed_at else None
+            snapshot["last_processed_age_seconds"] = processed_age
+            last_stream_frame_at = health["last_stream_frame_at"]
+            stream_age = round(max(0.0, now - last_stream_frame_at), 2) if last_stream_frame_at else None
+            snapshot["last_stream_frame_age_seconds"] = stream_age
+            q = upload_frame_queues[key]
+            snapshot["queue_depth"] = q.qsize() if VIDEO_SOURCES[key]["file"] == "upload" else 0
+            oldest_age = None
+            if VIDEO_SOURCES[key]["file"] == "upload":
+                with q.mutex:
+                    if q.queue:
+                        oldest_item = q.queue[0]
+                        if isinstance(oldest_item, tuple) and len(oldest_item) == 2:
+                            oldest_age = max(0.0, time.monotonic() - oldest_item[0])
+            snapshot["oldest_queue_frame_age_seconds"] = round(oldest_age, 3) if oldest_age is not None else None
+            if VIDEO_SOURCES[key]["file"] == "upload" and (age is None or age > 5.0):
+                snapshot["status"] = "stale" if last_frame_at else "waiting"
+            elif VIDEO_SOURCES[key]["file"] != "upload" and last_frame_at and age > 5.0:
+                snapshot["status"] = "stale"
+            elif key == current_video and (stream_age is None or stream_age > 5.0):
+                snapshot["status"] = "stale" if last_stream_frame_at else "waiting"
+            elif health["worker_status"] in {"starting", "recovering", "stopped"}:
+                snapshot["status"] = "reconnecting" if last_frame_at else "waiting"
+            camera_metrics[key] = snapshot
+    metrics["cameras"] = camera_metrics
     return jsonify(metrics)
 
 
@@ -2186,7 +2571,7 @@ def switch_video_route():
     it hasn't run yet. Already-running cameras just get current_video
     updated; the processing loops pick it up on their next iteration.
     """
-    global current_video
+    global current_video, latest_frame, latest_frame_seq
     data    = request.get_json()
     new_vid = data.get("video")
     if new_vid in VIDEO_SOURCES:
@@ -2199,6 +2584,10 @@ def switch_video_route():
             if not isinstance(VIDEO_SOURCES[new_vid]["file"], int):
                 camera_seek_targets[new_vid] = source_frame
             current_video = new_vid
+            latest_frame = None
+            latest_frame_seq += 1
+            frame_condition.notify_all()
+            update_camera_health(new_vid, status="waiting", last_stream_frame_at=None)
         ensure_camera_started(new_vid)
         return jsonify({"status": "ok", "frame": source_frame})
     return jsonify({"status": "error"}), 400
@@ -2282,12 +2671,18 @@ def camera_upload(camera_key):
             
             q = upload_frame_queues.get(camera_key)
             if q is not None:
-                if q.full():
-                    try:
-                        q.get_nowait()
-                    except Exception:
-                        pass
-                q.put(img)
+                enqueue_latest_camera_frame(camera_key, img)
+                record_camera_frame(camera_key)
+                try:
+                    client_reconnects = int(request.headers.get("X-Camera-Reconnection-Attempts", "0"))
+                    client_read_failures = int(request.headers.get("X-Camera-Last-Read-Failure-Burst", "0"))
+                except ValueError:
+                    client_reconnects = client_read_failures = 0
+                update_camera_health(
+                    camera_key, status="connected",
+                    client_reconnection_attempts=max(0, client_reconnects),
+                    client_last_read_failure_burst=max(0, client_read_failures),
+                )
                 # Ensure the background processing thread is running for this camera
                 ensure_camera_started(camera_key)
                 return jsonify({"status": "ok"})

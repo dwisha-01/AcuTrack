@@ -27,4 +27,12 @@ Wildtrack/
 .vscode/
 
 # Databases
-*.db
+*.db
+
+
+static/snapshots/
+
+# Local database and ML model files
+accutrack.db
+yolov8n.onnx
+yolov8n.pt
