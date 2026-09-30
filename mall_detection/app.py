@@ -51,6 +51,7 @@ def to_ist_str(dt):
 from flask_socketio import SocketIO
 from ultralytics import YOLO
 from boxmot.trackers.strongsort.strongsort import StrongSort
+from tracker_adapter import DeepSortAdapter, create_tracker, selected_tracker_algorithm
 from pathlib import Path
 from collections import deque
 import queue
@@ -253,27 +254,29 @@ class DummyCMC:
         # Returns identity warp matrix to bypass OpenCV's findTransformECC
         return np.eye(2, 3, dtype=np.float32)
 
-# ── STRONGSORT + OSNET (one tracker per camera) ───────────────────────────────
+# ── CONFIGURED TRACKER (one instance per camera) ──────────────────────────────
 # FIX: max_age reduced from 60 → 20 to eliminate ghost tracks that inflate FP.
 # At ~5 FPS effective rate, max_age=20 = ~4 seconds of track persistence — realistic.
 trackers = {k: None for k in VIDEO_SOURCES}
 tracker_init_lock = threading.Lock()
+TRACKER_ALGORITHM = selected_tracker_algorithm()
 
 
 def get_tracker(camera_key):
-    """Create a StrongSORT instance only when its camera is first used."""
+    """Create the configured tracker only when its camera is first used."""
     with tracker_init_lock:
         tracker = trackers[camera_key]
         if tracker is None:
-            print(f"[{camera_key}] Loading StrongSort + OSNet Re-ID...")
-            tracker = StrongSort(
-                reid_weights=Path("osnet_x0_25_msmt17.pt"),
+            print(f"[{camera_key}] Loading {TRACKER_ALGORITHM} tracker...")
+            tracker = create_tracker(
+                TRACKER_ALGORITHM,
+                strongsort_factory=StrongSort,
                 device=device,
-                half=(device.type == "cuda"),
-                max_age=90,
-                max_cos_dist=0.55,
+                weights_path=Path("osnet_x0_25_msmt17.pt"),
             )
-            tracker.cmc = DummyCMC()
+            if TRACKER_ALGORITHM == "strongsort":
+                tracker.cmc = DummyCMC()
+            tracker._accutrack_algorithm = TRACKER_ALGORITHM
             trackers[camera_key] = tracker
         return tracker
 
@@ -1630,6 +1633,9 @@ def reset_tracker_tracks(vid):
     t = trackers[vid]
     if t is None:
         return
+    if isinstance(t, DeepSortAdapter):
+        t.reset()
+        return
     try:
         t.tracker.tracks = []
     except AttributeError:
@@ -1879,9 +1885,11 @@ def camera_processing_loop(camera_key):
                 dets = state["prev_dets"]
             inference_ms = (time.perf_counter() - inference_started) * 1000.0 if run_detection else 0.0
 
-            # ── StrongSORT ──────────────────────────────────────────────────────
+            # ── Local tracker update ────────────────────────────────────────────
             tracker = get_tracker(camera_key)
             tracking_started = time.perf_counter()
+            tracker_tracks_before = getattr(getattr(tracker, "tracker", None), "tracks", [])
+            tracker_ids_before = {int(track.id) for track in tracker_tracks_before}
             if run_detection:
                 tracks = tracker.update(dets, frame)
                 prev_tracks = tracks
@@ -1889,6 +1897,21 @@ def camera_processing_loop(camera_key):
                 tracks = prev_tracks
             tracks = deduplicate_tracks(tracks)
             tracking_ms = (time.perf_counter() - tracking_started) * 1000.0 if run_detection else 0.0
+            if run_detection:
+                tracker_tracks_after = getattr(getattr(tracker, "tracker", None), "tracks", [])
+                tracker_ids_after = {int(track.id) for track in tracker_tracks_after}
+                active_track_count = sum(
+                    int(getattr(track, "time_since_update", 0)) == 0
+                    for track in tracker_tracks_after
+                )
+                print(
+                    f"[TRACKER_DIAGNOSTIC] camera={camera_key} "
+                    f"algorithm={getattr(tracker, '_accutrack_algorithm', 'strongsort')} "
+                    f"active_tracks={active_track_count} "
+                    f"new_local_tracks={len(tracker_ids_after - tracker_ids_before)} "
+                    f"removed_tracks={len(tracker_ids_before - tracker_ids_after)} "
+                    f"processing_ms={tracking_ms:.2f}"
+                )
 
             # ── Live validation scoring (Wildtrack GT) ──────────────────────────
             if not LIVE_DEMO_MODE and camera_key in ["cam1", "cam2", "cam3", "cam4", "cam5", "cam6", "cam7"]:
@@ -3136,7 +3159,7 @@ def _load_gallery_from_db():
 if __name__ == '__main__':
     print("=" * 60)
     print("  AcuTrack — Hybrid ML + Rule Suspicious Tracking")
-    print("  StrongSort + OSNet Re-ID + LSTM Autoencoder")
+    print(f"  {TRACKER_ALGORITHM} + OSNet Re-ID + LSTM Autoencoder")
     print("=" * 60)
 
     # Initialize the database and seed defaults
