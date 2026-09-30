@@ -51,6 +51,7 @@ def to_ist_str(dt):
 from flask_socketio import SocketIO
 from ultralytics import YOLO
 from boxmot.trackers.strongsort.strongsort import StrongSort
+from tracker_adapter import OCSortAdapter, create_tracker, selected_tracker_algorithm
 from pathlib import Path
 from collections import deque
 import queue
@@ -258,22 +259,24 @@ class DummyCMC:
 # At ~5 FPS effective rate, max_age=20 = ~4 seconds of track persistence — realistic.
 trackers = {k: None for k in VIDEO_SOURCES}
 tracker_init_lock = threading.Lock()
+TRACKER_ALGORITHM = selected_tracker_algorithm()
 
 
 def get_tracker(camera_key):
-    """Create a StrongSORT instance only when its camera is first used."""
+    """Create the configured tracker only when its camera is first used."""
     with tracker_init_lock:
         tracker = trackers[camera_key]
         if tracker is None:
-            print(f"[{camera_key}] Loading StrongSort + OSNet Re-ID...")
-            tracker = StrongSort(
-                reid_weights=Path("osnet_x0_25_msmt17.pt"),
+            print(f"[{camera_key}] Loading {TRACKER_ALGORITHM} tracker...")
+            tracker = create_tracker(
+                TRACKER_ALGORITHM,
+                strongsort_factory=StrongSort,
                 device=device,
-                half=(device.type == "cuda"),
-                max_age=90,
-                max_cos_dist=0.55,
+                weights_path=Path("osnet_x0_25_msmt17.pt"),
             )
-            tracker.cmc = DummyCMC()
+            if TRACKER_ALGORITHM == "strongsort":
+                tracker.cmc = DummyCMC()
+            tracker._accutrack_algorithm = TRACKER_ALGORITHM
             trackers[camera_key] = tracker
         return tracker
 
@@ -1630,6 +1633,9 @@ def reset_tracker_tracks(vid):
     t = trackers[vid]
     if t is None:
         return
+    if isinstance(t, OCSortAdapter):
+        t.reset()
+        return
     try:
         t.tracker.tracks = []
     except AttributeError:
@@ -1882,6 +1888,8 @@ def camera_processing_loop(camera_key):
             # ── StrongSORT ──────────────────────────────────────────────────────
             tracker = get_tracker(camera_key)
             tracking_started = time.perf_counter()
+            tracker_tracks_before = getattr(getattr(tracker, "tracker", None), "tracks", [])
+            tracker_ids_before = {int(track.id) for track in tracker_tracks_before}
             if run_detection:
                 tracks = tracker.update(dets, frame)
                 prev_tracks = tracks
@@ -1889,6 +1897,27 @@ def camera_processing_loop(camera_key):
                 tracks = prev_tracks
             tracks = deduplicate_tracks(tracks)
             tracking_ms = (time.perf_counter() - tracking_started) * 1000.0 if run_detection else 0.0
+            if run_detection:
+                diagnostics = getattr(tracker, "last_diagnostics", None)
+                if diagnostics is None:
+                    active_tracks = getattr(getattr(tracker, "tracker", None), "tracks", [])
+                    tracker_ids_after = {int(track.id) for track in active_tracks}
+                    diagnostics = {
+                        "active_tracks": sum(
+                            int(getattr(track, "time_since_update", 0)) == 0
+                            for track in active_tracks
+                        ),
+                        "new_local_tracks": len(tracker_ids_after - tracker_ids_before),
+                        "removed_tracks": len(tracker_ids_before - tracker_ids_after),
+                    }
+                print(
+                    f"[TRACKER_DIAGNOSTIC] camera={camera_key} "
+                    f"algorithm={getattr(tracker, '_accutrack_algorithm', 'strongsort')} "
+                    f"active_tracks={diagnostics['active_tracks']} "
+                    f"new_local_tracks={diagnostics['new_local_tracks']} "
+                    f"removed_tracks={diagnostics['removed_tracks']} "
+                    f"processing_ms={tracking_ms:.2f}"
+                )
 
             # ── Live validation scoring (Wildtrack GT) ──────────────────────────
             if not LIVE_DEMO_MODE and camera_key in ["cam1", "cam2", "cam3", "cam4", "cam5", "cam6", "cam7"]:
@@ -1987,26 +2016,32 @@ def camera_processing_loop(camera_key):
                             # (coasting ghost tracks that have been superseded should not register new GIDs)
                             should_match = (track_status == "ACTIVE") or (key in local_to_global and local_to_global[key] > 0)
                             if should_match:
-                                for t in tracker.tracker.tracks:
-                                    if t.id == track_id and t.features is not None and len(t.features) > 0:
-                                        emb       = np.array(t.features[-1])
-                                        emb       = emb / (np.linalg.norm(emb) + 1e-8)
-                                        box_area  = (x2 - x1) * (y2 - y1)
-                                        global_id = match_or_register(
-                                            camera_key, track_id, emb,
-                                            exclude_gids=frame_claimed_gids,
-                                            box_area=box_area,
-                                            frame=frame,
-                                            bbox=(x1, y1, x2, y2),
-                                            confidence=conf,
-                                            current_zone=current_zone,
-                                            run_face_detection=True,
-                                            ghost_claims=ghost_claims
-                                        )
-                                        frame_claimed_gids.add(global_id)
-                                        if global_id in ghost_claims:
-                                            del ghost_claims[global_id]
-                                        break
+                                emb = None
+                                if isinstance(tracker, OCSortAdapter):
+                                    emb = tracker.get_embedding(frame, (x1, y1, x2, y2))
+                                else:
+                                    for t in tracker.tracker.tracks:
+                                        if t.id == track_id and t.features is not None and len(t.features) > 0:
+                                            emb = np.array(t.features[-1])
+                                            break
+                                if emb is not None:
+                                    emb = np.asarray(emb)
+                                    emb = emb / (np.linalg.norm(emb) + 1e-8)
+                                    box_area = (x2 - x1) * (y2 - y1)
+                                    global_id = match_or_register(
+                                        camera_key, track_id, emb,
+                                        exclude_gids=frame_claimed_gids,
+                                        box_area=box_area,
+                                        frame=frame,
+                                        bbox=(x1, y1, x2, y2),
+                                        confidence=conf,
+                                        current_zone=current_zone,
+                                        run_face_detection=True,
+                                        ghost_claims=ghost_claims
+                                    )
+                                    frame_claimed_gids.add(global_id)
+                                    if global_id in ghost_claims:
+                                        del ghost_claims[global_id]
                         except Exception as e:
                             print(f"[REID EXCEPTION] {e}")
 
